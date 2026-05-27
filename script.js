@@ -181,15 +181,78 @@ function fazerLogin(){
 
     if (!usuario || !senha || !msg) return;
 
-    // Demo: aceite qualquer usuário/senha e armazene “logado”
-    localStorage.setItem('login_demo', JSON.stringify({ usuario: usuario.value.trim(), logadoEm: Date.now() }));
-    msg.style.color = '#d7b3ff';
-    msg.textContent = 'Login efetuado (demo). Prosseguindo...';
+    const user = usuario.value.trim();
+    const pass = senha.value;
+
+    const raw = localStorage.getItem('users_planner_v1');
+    const users = raw ? JSON.parse(raw) : [];
+
+    const encontrado = users.find(u => u.usuario === user);
+
+    if (!encontrado) {
+        msg.style.color = '#ff6b7a';
+        msg.textContent = 'Usuário não encontrado.';
+        return;
+    }
+
+    if (encontrado.senha !== pass) {
+        msg.style.color = '#ff6b7a';
+        msg.textContent = 'Senha incorreta.';
+        return;
+    }
+
+    // login ok
+    localStorage.setItem('login_planner_v1', JSON.stringify({ usuario: user, logadoEm: Date.now() }));
+    msg.style.color = '#2ecc71';
+    msg.textContent = 'Login efetuado. Prosseguindo...';
 
     setTimeout(() => {
-        // redireciona para o menu
         window.location.href = 'index.html';
-    }, 700);
+    }, 500);
+}
+
+function cadastrarUsuario(){
+    const u = document.getElementById('cadUsuario');
+    const s = document.getElementById('cadSenha');
+    const t = document.getElementById('cadTelefone');
+    const msg = document.getElementById('cadastro-msg');
+    if (!u || !s || !msg) return;
+
+    const usuario = u.value.trim();
+    const senha = s.value;
+    const telefone = t ? (t.value || '').trim() : '';
+
+    if (usuario.length < 3) {
+        msg.style.color = '#ff6b7a';
+        msg.textContent = 'Usuário deve ter pelo menos 3 caracteres.';
+        return;
+    }
+
+    if (senha.length < 4) {
+        msg.style.color = '#ff6b7a';
+        msg.textContent = 'Senha deve ter pelo menos 4 caracteres.';
+        return;
+    }
+
+    const raw = localStorage.getItem('users_planner_v1');
+    const users = raw ? JSON.parse(raw) : [];
+
+    const existe = users.some(x => x.usuario === usuario);
+    if (existe) {
+        msg.style.color = '#ff6b7a';
+        msg.textContent = 'Esse usuário já existe.';
+        return;
+    }
+
+    users.push({ usuario, senha, telefone });
+    localStorage.setItem('users_planner_v1', JSON.stringify(users));
+
+    msg.style.color = '#2ecc71';
+    msg.textContent = 'Cadastro realizado com sucesso! Faça login.';
+
+    setTimeout(() => {
+        window.location.href = 'login.html';
+    }, 800);
 }
 
 function enviarCodigoSMS(){

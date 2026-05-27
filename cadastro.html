@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cadastro</title>
+  <link rel="stylesheet" href="estilo/style.css" />
+</head>
+<body>
+
+  <div class="pagina-box">
+    <h1>📝 Cadastro</h1>
+
+    <div id="cadastro-view">
+      <label>Usuário</label>
+      <input type="text" id="cadUsuario" placeholder="Crie um usuário" />
+
+      <label>Senha</label>
+      <input type="password" id="cadSenha" placeholder="Crie uma senha" />
+
+      <label>Telefone (opcional - para recuperação)</label>
+      <input type="tel" id="cadTelefone" placeholder="Ex: 11999999999" />
+
+      <button type="button" onclick="cadastrarUsuario()">Criar conta</button>
+
+      <p style="margin-top: 12px; opacity: 0.9; font-size: 14px;">
+        Já tem conta?
+        <a href="login.html" class="voltar" style="display:inline-block; padding: 8px 14px; margin-top: 0;">⬅ Ir para login</a>
+      </p>
+
+      <div id="cadastro-msg" style="margin-top: 14px; font-size: 14px; opacity: 0.95;"></div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
+
