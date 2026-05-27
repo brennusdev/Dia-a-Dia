@@ -157,7 +157,107 @@ function deletarTarefaDia(id){
     renderTarefasDoDia(diaSelecionado);
 }
 
+// ========================= LOGIN / RECUPERAÇÃO POR SMS (demo) =========================
+// Observação: sem backend. Somente para UI/fluxo.
+
+function mostrarEsqueciSenha(){
+    const loginView = document.getElementById('login-view');
+    const forgotView = document.getElementById('forgot-view');
+    if (loginView) loginView.style.display = 'none';
+    if (forgotView) forgotView.style.display = 'block';
+}
+
+function voltarLogin(){
+    const loginView = document.getElementById('login-view');
+    const forgotView = document.getElementById('forgot-view');
+    if (forgotView) forgotView.style.display = 'none';
+    if (loginView) loginView.style.display = 'block';
+}
+
+function fazerLogin(){
+    const usuario = document.getElementById('loginUsuario');
+    const senha = document.getElementById('loginSenha');
+    const msg = document.getElementById('login-msg');
+
+    if (!usuario || !senha || !msg) return;
+
+    // Demo: aceite qualquer usuário/senha e armazene “logado”
+    localStorage.setItem('login_demo', JSON.stringify({ usuario: usuario.value.trim(), logadoEm: Date.now() }));
+    msg.style.color = '#d7b3ff';
+    msg.textContent = 'Login efetuado (demo). Prosseguindo...';
+
+    setTimeout(() => {
+        // redireciona para o menu
+        window.location.href = 'index.html';
+    }, 700);
+}
+
+function enviarCodigoSMS(){
+    const telEl = document.getElementById('resetTelefone');
+    const resetMsg = document.getElementById('reset-msg');
+
+    if (!telEl || !resetMsg) return;
+
+    const telefone = (telEl.value || '').trim();
+    const codigo = gerarCodigo();
+
+    localStorage.setItem('sms_demo_codigo', JSON.stringify({ telefone, codigo, geradoEm: Date.now() }));
+
+    resetMsg.style.color = '#d7b3ff';
+    resetMsg.textContent = 'Código enviado (demo). Verifique o campo abaixo.';
+
+    const smsArea = document.querySelector('.sms-area');
+    const codigoEl = document.getElementById('resetCodigo');
+    if (smsArea) smsArea.style.display = 'block';
+
+    if (codigoEl) codigoEl.value = '';
+
+    // Mostra o código no console para testes (demo)
+    console.log('[DEMO SMS] Código:', codigo);
+}
+
+function gerarCodigo(){
+    // código seguro (apenas demo)
+    return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+function confirmarRedefinicao(){
+    const resetCodigo = document.getElementById('resetCodigo');
+    const resetNovaSenha = document.getElementById('resetNovaSenha');
+    const resetMsg = document.getElementById('reset-msg');
+
+    if (!resetCodigo || !resetNovaSenha || !resetMsg) return;
+
+    const codigoDigitado = (resetCodigo.value || '').trim();
+    const novoSenha = (resetNovaSenha.value || '').trim();
+
+    const raw = localStorage.getItem('sms_demo_codigo');
+    if(!raw){
+        resetMsg.style.color = '#ff6b7a';
+        resetMsg.textContent = 'Nenhum código foi enviado. Tente novamente.';
+        return;
+    }
+
+    const data = JSON.parse(raw);
+    if (data.codigo !== codigoDigitado){
+        resetMsg.style.color = '#ff6b7a';
+        resetMsg.textContent = 'Código inválido. Verifique e tente novamente.';
+        return;
+    }
+
+    // grava “senha” demo
+    localStorage.setItem('senha_demo', JSON.stringify({ senha: novoSenha, redefinidoEm: Date.now() }));
+
+    resetMsg.style.color = '#2ecc71';
+    resetMsg.textContent = 'Senha redefinida com sucesso (demo).';
+
+    setTimeout(() => {
+        voltarLogin();
+    }, 800);
+}
+
 // ========================= FINANCEIRO =========================
+
 
 function calcularFinanceiro(){
     const entradaEl = document.getElementById('entrada');
@@ -294,6 +394,11 @@ function deletarTarefaLista(id){
 // ========================= INIT =========================
 
 document.addEventListener('DOMContentLoaded', () => {
+    // ========================= LOGIN (opcional) =========================
+    if (document.title.includes('Login')) {
+        // nada necessário no momento
+    }
+
     if (document.title.includes('Anotações')) {
         mesOffset = 0;
         diaSelecionado = null;
@@ -301,6 +406,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (document.title.includes('Finanças')) {
         carregarFinanceiro();
     } else if (document.title.includes('Lista de Tarefas')) {
+
 
         const dataSel = document.getElementById('dataTarefa');
         if (dataSel && !dataSel.value) {

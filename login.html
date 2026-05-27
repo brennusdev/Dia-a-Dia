@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login</title>
+  <link rel="stylesheet" href="estilo/style.css" />
+</head>
+<body>
+
+  <div class="pagina-box">
+    <h1>🔐 Entrar</h1>
+
+    <div id="login-view">
+      <label>Usuário</label>
+      <input type="text" id="loginUsuario" placeholder="Seu usuário" />
+
+      <label>Senha</label>
+      <input type="password" id="loginSenha" placeholder="Sua senha" />
+
+      <button type="button" onclick="fazerLogin()">Entrar</button>
+
+      <p style="margin-top: 12px; opacity: 0.9; font-size: 14px;">
+        <a href="#" class="voltar" style="display:inline-block; padding: 8px 14px; margin-top: 0;" onclick="mostrarEsqueciSenha(); return false;">
+          Esqueci sua senha
+        </a>
+      </p>
+
+      <div id="login-msg" style="margin-top: 14px; font-size: 14px; opacity: 0.95;"></div>
+    </div>
+
+    <div id="forgot-view" style="display:none; text-align:left;">
+      <h2 style="margin-bottom: 10px; text-align:left;">Redefinir senha</h2>
+      <p style="opacity:0.9; font-size:14px; margin-bottom: 12px;">
+        Informe seu número de telefone para receber um SMS com um código seguro.
+      </p>
+
+      <label>Telefone (com DDD)</label>
+      <input type="tel" id="resetTelefone" placeholder="Ex: 11999999999" />
+
+      <button type="button" onclick="enviarCodigoSMS()">Enviar código</button>
+
+      <div class="sms-area" style="display:none; margin-top: 14px;">
+        <label>Código recebido</label>
+        <input type="text" id="resetCodigo" placeholder="Digite o código" />
+
+        <label>Nova senha</label>
+        <input type="password" id="resetNovaSenha" placeholder="Digite a nova senha" />
+
+        <button type="button" onclick="confirmarRedefinicao()">Confirmar redefinição</button>
+      </div>
+
+      <p style="margin-top: 12px; opacity: 0.9; font-size: 14px;">
+        <a href="#" class="voltar" style="display:inline-block; padding: 8px 14px; margin-top: 0;" onclick="voltarLogin(); return false;">
+          ⬅ Voltar
+        </a>
+      </p>
+
+      <div id="reset-msg" style="margin-top: 14px; font-size: 14px; opacity: 0.95;"></div>
+    </div>
+
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
+
