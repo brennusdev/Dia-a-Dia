@@ -271,6 +271,31 @@ button:hover {
 }
 .dia:hover { background: rgba(255,255,255,0.2); }
 
+/* SETAS (mês) - pequenas para não desproporcional */
+.mes-navegacao {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.mes-btn {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    font-size: 16px;
+    font-weight: 700;
+    border-radius: 10px;
+    line-height: 34px;
+}
+
+.mes-info {
+    font-weight: 800;
+    font-size: 18px;
+}
+
+
 /* VOLTAR */
 .voltar {
     display: inline-block;
