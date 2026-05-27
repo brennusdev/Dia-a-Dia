@@ -12,9 +12,21 @@
 
         <h1>Lista de Afazeres</h1>
 
+        <label>Dia (você escolhe no calendário):</label>
+        <input type="date" id="dataTarefa">
+
+        <label>Tipo:</label>
+        <select id="tipoTarefa">
+            <option value="urgente">🔴 Urgente</option>
+            <option value="prioridade">🟡 Prioridade</option>
+            <option value="normal" selected>🟢 Normal</option>
+        </select>
+
+        <label>Descrição da tarefa:</label>
         <input type="text" id="novaTarefa" placeholder="Digite uma nova tarefa...">
         <button onclick="adicionarTarefa()">➕ Adicionar Tarefa</button>
 
+        <h2 style="margin-top:20px">Tarefas do dia selecionado</h2>
         <ul id="listaTarefas"></ul>
 
         <a href="index.html" class="voltar">⬅ Voltar ao Menu</a>
