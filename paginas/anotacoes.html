@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anotações Mensais</title>
+    <link rel="stylesheet" href="../recursos/css/style.css">
+</head>
+<body>
+
+    <div class="pagina-box">
+
+        <h1>📅 Anotações do Mês</h1>
+
+        <div class="mes-navegacao">
+            <button class="mes-btn" type="button" onclick="mudarMes(-1)">⬅</button>
+            <div id="mes-atual" class="mes-info"></div>
+            <button class="mes-btn" type="button" onclick="mudarMes(1)">➡</button>
+        </div>
+
+        <div class="calendario-container">
+            <div class="semana-header">
+                <span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span>
+            </div>
+            <div id="calendario" class="calendario-grid"></div>
+        </div>
+
+        <div class="legendas">
+            <span class="legenda-urgente">🔴 Urgente</span>
+            <span class="legenda-prioridade">🟡 Prioridade</span>
+            <span class="legenda-normal">🟢 Normal</span>
+        </div>
+
+        <div class="tarefas-por-dia" id="tarefas-por-dia">
+            <h2>✅ Tarefas do Dia Selecionado</h2>
+            <div class="dia-selecionado" id="dia-selecionado">Clique em um dia do calendário</div>
+            <ul class="lista-dia" id="listaDia"></ul>
+        </div>
+
+        <a href="../paginas/index.html" class="voltar">⬅ Voltar ao Menu</a>
+
+    </div>
+
+    <script src="../recursos/js/script.js"></script>
+
+    
+</body>
+</html>
+
