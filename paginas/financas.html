@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finanças</title>
+    <link rel="stylesheet" href="../recursos/css/style.css">
+</head>
+<body>
+
+    <div class="pagina-box">
+
+        <h1>Controle Financeiro</h1>
+
+        <label>Entrada:</label>
+        <input type="number" id="entrada" placeholder="Valor recebido">
+
+        <label>Saída:</label>
+        <input type="number" id="saida" placeholder="Valor gasto">
+
+        <label>Meta:</label>
+        <input type="number" id="meta" placeholder="Meta financeira">
+
+        <button onclick="calcularFinanceiro()">Calcular</button>
+
+        <div id="resultado-financeiro">
+            <p>Saldo Atual: R$ 0</p>
+            <p>Falta para Meta: R$ 0</p>
+        </div>
+
+        <a href="../paginas/index.html" class="voltar">⬅ Voltar ao Menu</a>
+
+    </div>
+
+    <script src="../recursos/js/script.js"></script>
+</body>
+</html>
+
