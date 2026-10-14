@@ -107,8 +107,10 @@ async function carregarLinhas() {
 function inicializarMapa() {
   if (mapa) return; // já criado (evita recriar ao re-buscar)
 
-  // Cria o mapa centrado em São Paulo (zoom 12 = cidade inteira)
+  // Cria o mapa centrado em São Paulo (zoom 12 = cidade inteira).
+  // Guardamos também em window._mapa (útil para depuração no console F12).
   mapa = L.map("mapaReal").setView([-23.5505, -46.6333], 12);
+  window._mapa = mapa;
 
   // Camada de TILES = as ruas reais desenhadas pelo OpenStreetMap
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
