@@ -408,3 +408,101 @@ button:hover {
     background: rgba(122, 52, 255, 0.35);
     white-space: nowrap; /* não quebra o "Próximo em X min" */
 }
+
+/* ============================================================
+   ÔNIBUS — MAPA REAL (Leaflet + OpenStreetMap, ruas de verdade)
+   ============================================================ */
+
+/* Caixa que envolve o mapa */
+.mapa-box {
+    margin: 25px 0;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 20px;
+}
+
+/* Altura fixa do mapa (Leaflet exige altura definida) */
+#mapaReal {
+    height: 480px;
+    border-radius: 14px;
+    z-index: 1; /* mantém abaixo dos botões do próprio Leaflet */
+}
+
+/* Legenda colorida acima do mapa */
+.mapa-legenda {
+    display: flex;
+    justify-content: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    font-size: 14px;
+    margin: 8px 0;
+}
+
+.leg-onibus { color: #b98bff; }
+.leg-voce   { color: #2ecc71; }
+
+.mapa-dica {
+    font-size: 12.5px;
+    opacity: 0.7;
+    margin-top: 8px;
+}
+
+/* Placa do ônibus: retângulo roxo com o NÚMERO da linha */
+.placa-onibus {
+    background: linear-gradient(135deg, #7a3cff, #9b5cff);
+    color: white;
+    font-weight: 800;
+    font-family: monospace;
+    font-size: 13px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    border: 2px solid white;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
+    white-space: nowrap;
+}
+
+/* Marcador verde "Você": ponto com halo pulsante (animação CSS) */
+.ponto-voce {
+    width: 20px;
+    height: 20px;
+    background: #2ecc71;
+    border: 3px solid white;
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(46, 204, 113, 0.8);
+}
+
+/* Animação de pulso (o halo "respira") */
+@keyframes pulso-voce {
+    0%   { transform: scale(1);   opacity: 0.8; }
+    50%  { transform: scale(1.4); opacity: 0.3; }
+    100% { transform: scale(1);   opacity: 0.8; }
+}
+
+.ponto-voce span {
+    position: absolute;
+    inset: -6px;
+    border: 2px solid rgba(46, 204, 113, 0.7);
+    border-radius: 50%;
+    animation: pulso-voce 2s infinite;
+}
+
+/* Placa com o NÚMERO do ônibus (712, SV774, 959...) no cartão */
+.onibus-numero {
+    font-weight: 800;
+    font-size: 18px;
+    padding: 12px 18px;
+    min-width: 70px;
+    text-align: center;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #7a3cff, #9b5cff);
+    box-shadow: 0 4px 12px rgba(122, 52, 255, 0.4);
+    font-family: monospace; /* número fica bem legível */
+    white-space: nowrap;
+}
+
+/* Destaque do ônibus mais próximo da sua posição */
+.onibus-card.mais-proximo {
+    border: 1px solid #2ecc71;
+    box-shadow: 0 0 18px rgba(46, 204, 113, 0.35);
+}
