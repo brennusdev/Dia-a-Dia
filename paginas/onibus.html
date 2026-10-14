@@ -1,0 +1,127 @@
+<!doctype html>
+<!--
+  ============================================================
+  ÔNIBUS EM TEMPO REAL
+  ------------------------------------------------------------
+  Recursos desta página (tudo comentado em ../recursos/js/onibus.js):
+    1) Barra de busca por REGIÃO (CEP EXATO)  -> ViaCEP (grátis, sem chave)
+    2) Barra de busca por HORA                -> filtro local
+    3) Barra de busca por NÚMERO da linha     -> ex: 712, 774, SV774, 959
+    4) Geolocalização do aparelho (GPS)       -> API Geolocation
+    5) MAPA 3D (projeção isométrica em canvas) mostrando ônibus e você
+  ============================================================
+-->
+<html lang="pt-br">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Geolocalização exige HTTPS (ou localhost). Este meta força https em produção -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="upgrade-insecure-requests"
+    />
+    <title>Ônibus em Tempo Real</title>
+
+    <!-- CSS global do projeto -->
+    <link rel="stylesheet" href="../recursos/css/style.css" />
+  </head>
+  <body>
+    <div class="pagina-box" style="max-width: 1000px">
+      <h1>🚌 Ônibus em Tempo Real</h1>
+      <p>
+        Busque por <strong>CEP (exato)</strong>, <strong>horário</strong>,
+        <strong>número da linha</strong> ou use o
+        <strong>GPS do aparelho</strong>.
+      </p>
+
+      <!-- ================= FORMULÁRIO DE BUSCA MELHORADO ================= -->
+      <div class="busca-onibus">
+        <!-- BARRA 1: região por CEP EXATO (precisa existir no ViaCEP) -->
+        <div class="campo-busca">
+          <label for="buscaCep">📍 Região (CEP exato)</label>
+          <input
+            type="text"
+            id="buscaCep"
+            placeholder="Ex: 01001000 ou 01001-000"
+            maxlength="9"
+            inputmode="numeric"
+            autocomplete="postal-code"
+          />
+          <p id="cepInfo" class="cep-info" aria-live="polite"></p>
+        </div>
+
+        <!-- BARRA 2: horário mínimo de partida -->
+        <div class="campo-busca">
+          <label for="buscaHora">🕐 Horário (partidas a partir de)</label>
+          <input type="time" id="buscaHora" />
+        </div>
+
+        <!-- BARRA 3: número da linha (712, 774, SV774, 959, N103...) -->
+        <div class="campo-busca">
+          <label for="buscaNumero">🔢 Número do ônibus (opcional)</label>
+          <input
+            type="text"
+            id="buscaNumero"
+            placeholder="Ex: 712, SV774, 959"
+            maxlength="8"
+          />
+        </div>
+      </div>
+
+      <!-- Botões de ação -->
+      <button type="button" onclick="buscarOnibus()">🔍 Buscar ônibus</button>
+      <button
+        type="button"
+        class="btn-secundario"
+        onclick="usarMinhaLocalizacao()"
+      >
+        🛰️ Usar minha localização (GPS do aparelho)
+      </button>
+      <button
+        type="button"
+        class="btn-secundario"
+        onclick="iniciarTempoReal()"
+        id="btnTempoReal"
+      >
+        ▶️ Ativar atualização em tempo real (15s)
+      </button>
+
+      <!-- Status (GPS / tempo real / erros) -->
+      <p id="statusLocalizacao" class="status" aria-live="polite"></p>
+
+      <!-- ================= MAPA 3D (canvas isométrico) ================= -->
+      <div class="mapa-3d-box">
+        <h2>🗺️ Mapa 3D — posição dos ônibus</h2>
+        <p class="mapa-legenda">
+          <span class="leg-onibus">🟣 Ônibus</span>
+          <span class="leg-voce">🟢 Você</span>
+          <span class="leg-selecionado">🟡 Selecionado</span>
+        </p>
+        <!-- O desenho 3D é feito via canvas pelo onibus.js -->
+        <canvas
+          id="mapa3d"
+          width="900"
+          height="420"
+          aria-label="Mapa 3D dos ônibus"
+        ></canvas>
+        <p class="mapa-dica">
+          Vista isométrica: cada prédio marca a parada da linha (com o número do
+          ônibus). Seu ponto verde é o centro do mapa.
+        </p>
+      </div>
+
+      <!-- ================= LISTA DE RESULTADOS ================= -->
+      <div id="resultadosOnibus">
+        <p style="opacity: 0.8">
+          Nenhuma busca feita ainda. Informe um CEP, número da linha ou use sua
+          localização.
+        </p>
+      </div>
+
+      <a href="../paginas/index.html" class="voltar">⬅️ Voltar ao Menu</a>
+    </div>
+
+    <!-- Lógica: busca, ViaCEP, GPS, tempo real e desenho do mapa 3D -->
+    <script src="../recursos/js/onibus.js"></script>
+  </body>
+</html>
