@@ -3,34 +3,40 @@
    ------------------------------------------------------------
    Fluxo geral:
    1) CEP EXATO   -> ViaCEP (API pública). Só aceita CEP que EXISTA
-                     e que tenha rua/bairro; a posição vem de uma
-                     tabela de CEPs conhecidos com coordenadas reais.
+                     e tenha endereço; posição exata vem de tabela
+                     de CEPs com coordenadas reais.
    2) HORA        -> filtra partidas a partir do horário digitado.
-   3) NÚMERO      -> busca por número da linha (712, 774, SV774...),
-                     tolerante: ignora espaços, hífen e maiúsculas
-                     ("sv 774", "sv774", "774" encontram "SV774").
-   4) GPS         -> navigator.geolocation (celular/PC), com precisão.
-   5) MAPA 3D     -> canvas com projeção isométrica: cada ônibus vira
-                     uma "torre" com a placa do número; você fica no
-                     centro (ponto verde).
-   6) TEMPO REAL  -> setInterval de 15s re-renderiza lista + mapa.
+   3) NÚMERO      -> busca por número da linha (712, SV774, 959...),
+                     tolerante (ignora espaços/hífen/maiúsculas).
+   4) GPS         -> navigator.geolocation (celular/PC), alta precisão.
+   5) MAPA REAL   -> Leaflet + OpenStreetMap: RUAS DE VERDADE.
+                     Cada ônibus é um marcador que anda pela rua real
+                     (rota calculada pelo OSRM, servidor público).
+                     Você é um marcador verde no mapa.
+   6) TEMPO REAL  -> dois relógios:
+                     - relógio rápido (1s): desliza os ônibus pela rota;
+                     - relógio lento (15s): refaz a busca/ordenamento.
    ============================================================ */
 
 /* ---------- ESTADO GLOBAL DA PÁGINA ---------- */
-const INTERVALO_TEMPORAL_MS = 15000; // atualização em tempo real a cada 15s
-let intervaloReal = null; // timer do tempo real (para ligar/desligar)
+const INTERVALO_TEMPORAL_MS = 15000; // atualização lenta (lista/ordenação)
+const TICK_DESLIZA_MS = 2000; // desliza os ônibus a cada 2s
+let intervaloReal = null; // timer do tempo real (ligar/desligar)
 let localizacaoAtual = null; // { lat, lon } do usuário
 let nomeRegiaoAtual = ""; // bairro/cidade detectado
 let todasLinhas = []; // cache do onibus.json
 let ultimaBusca = null; // últimas linhas ordenadas (para o mapa)
 
+/* ---------- MAPA (Leaflet) ---------- */
+let mapa = null; // objeto do mapa Leaflet
+let marcadorVoce = null; // marcador verde "Você"
+let marcadoresOnibus = {}; // { numero: marcador } de cada ônibus
+let rotasOnibus = {}; // { numero: [lat,lon, lat,lon...] } rota na rua real
+
 /* ============================================================
    TABELA DE CEPs CONHECIDOS (BUSCA EXATA)
-   ------------------------------------------------------------
-   Cada CEP aqui tem coordenadas REAIS aproximadas do endereço.
-   A busca é EXATA: só aceita o CEP completo e existente.
-   Para um projeto real, troque por um serviço de geocoding
-   (ex: Nominatim/OpenStreetMap, also grátis).
+   Coordenadas reais aproximadas do endereço de cada CEP.
+   Para produção, troque por geocoding (ex: Nominatim/OSM).
    ============================================================ */
 const CEP_CONHECIDOS = {
   "01001000": {
@@ -75,32 +81,171 @@ const CEP_CONHECIDOS = {
    CARREGA OS DADOS DAS LINHAS (fetch do JSON local)
    ============================================================ */
 async function carregarLinhas() {
-  if (todasLinhas.length > 0) return; // já está em cache (memória)
+  if (todasLinhas.length > 0) return; // cache em memória
 
   try {
     const resposta = await fetch("../dados/onibus.json");
     const json = await resposta.json();
     todasLinhas = json.linhas || [];
   } catch (erro) {
-    // Falhou (ex: aberto com file://). Avisamos claramente o usuário.
     const resultados = document.getElementById("resultadosOnibus");
     if (resultados) {
       resultados.innerHTML =
-        `<p style="color:#ff6b7a">⚠️ Não foi possível carregar os dados dos ônibus. ` +
+        `<p style="color:#ff6b7a">⚠️ Não foi possível carregar os dados. ` +
         `Abra o projeto por um servidor local (Live Server ou <code>python -m http.server</code>).</p>`;
     }
   }
 }
 
 /* ============================================================
-   BARRA 1: BUSCA POR CEP EXATO
+   MAPA REAL COM RUAS DE VERDADE (Leaflet + OpenStreetMap)
    ------------------------------------------------------------
-   Regras melhoradas:
-   - aceita "01001000" ou "01001-000" (limpa tudo que não é dígito)
-   - exige exatamente 8 dígitos
-   - consulta o ViaCEP: se o CEP não existir -> erro claro
-   - se existir mas não tiver coordenada conhecida -> avisa que a
-     posição é aproximada pelo centro da cidade do CEP (não inventa)
+   - tileLayer do OSM: são as "imagens das ruas" (o mapa de verdade);
+   - marcador de ônibus: ícone roxo com o NÚMERO da linha;
+   - clique no ônibus: mostra linha, nome e próxima partida.
+   ============================================================ */
+function inicializarMapa() {
+  if (mapa) return; // já criado (evita recriar ao re-buscar)
+
+  // Cria o mapa centrado em São Paulo (zoom 12 = cidade inteira)
+  mapa = L.map("mapaReal").setView([-23.5505, -46.6333], 12);
+
+  // Camada de TILES = as ruas reais desenhadas pelo OpenStreetMap
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "© OpenStreetMap",
+  }).addTo(mapa);
+}
+
+// Ícone de ônibus: um retângulo roxo com o número da linha dentro (HTML/CSS)
+function iconeOnibus(numero, proximaPartida) {
+  return L.divIcon({
+    className: "icone-onibus",
+    html: `<div class="placa-onibus" title="Linha ${numero} — próxima partida ${proximaPartida}">🚌 ${numero}</div>`,
+    iconSize: [null, null], // o HTML define o tamanho
+    iconAnchor: [24, 14], // ponto do ícone que "encosta" no mapa
+  });
+}
+
+// Ícone de "Você": círculo verde com halo pulsante
+function iconeVoce() {
+  return L.divIcon({
+    className: "icone-voce",
+    html: `<div class="ponto-voce"><span></span></div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  });
+}
+
+/* ============================================================
+   ROTA NA RUA REAL (OSRM — servidor público de rotas)
+   ------------------------------------------------------------
+   Pede ao OSRM o caminho de RUAS reais entre dois pontos.
+   O servidor responde com a "geometria": uma lista de
+   coordenadas [lat, lon] que seguem as ruas da cidade.
+   Se o OSRM estiver fora, usamos a linha reta (fallback).
+   ============================================================ */
+async function calcularRotaReal(latA, lonA, latB, lonB) {
+  try {
+    const url =
+      `https://router.project-osrm.org/route/v1/driving/` +
+      `${lonA},${latA};${lonB},${latB}` +
+      `?overview=full&geometries=geojson`;
+
+    const resposta = await fetch(url);
+    const dados = await resposta.json();
+
+    if (dados.code === "Ok" && dados.routes.length > 0) {
+      // GeoJSON vem como [lon, lat] — invertemos para [lat, lon]
+      return dados.routes[0].geometry.coordinates.map(([lon, lat]) => [
+        lat,
+        lon,
+      ]);
+    }
+  } catch (e) {
+    // Sem internet ou OSRM fora -> fallback abaixo
+  }
+
+  // FALLBACK: linha reta entre os dois pontos (ainda mostra algo no mapa)
+  return [
+    [latA, lonA],
+    [latB, lonB],
+  ];
+}
+
+/* ============================================================
+   MOVIMENTO EM TEMPO REAL PEAS RUAS
+   ------------------------------------------------------------
+   Cada ônibus tem uma rota (lista de pontos de rua). O marcador
+   anda de ponto em ponto a cada "tick" (2s), como um ônibus real.
+   ============================================================ */
+function criarOuAtualizarOnibusNoMapa(linha) {
+  inicializarMapa();
+
+  const posInicial = [linha.lat, linha.lon];
+
+  // Ainda não tem marcador para essa linha? Cria.
+  if (!marcadoresOnibus[linha.numero]) {
+    marcadoresOnibus[linha.numero] = L.marker(posInicial, {
+      icon: iconeOnibus(linha.numero, linha.partidas[0]),
+    }).addTo(mapa);
+
+    // Clique no ônibus: popup com as informações da linha
+    marcadoresOnibus[linha.numero].bindPopup(
+      `<strong>🚌 Linha ${linha.numero}</strong><br>${linha.nome}<br>` +
+        `Partidas: ${linha.partidas.join(" · ")}`,
+    );
+
+    // Calcula a ROTA NA RUA REAL entre VOCÊ e a parada do ônibus
+    calcularRotaReal(
+      localizacaoAtual.lat,
+      localizacaoAtual.lon,
+      linha.lat,
+      linha.lon,
+    ).then((rota) => {
+      rotasOnibus[linha.numero] = rota;
+      linha._pontoRota = 0; // começa no início da rota
+
+      // Desenha a linha da rota no mapa (tracejada roxa)
+      L.polyline(rota, {
+        color: "#9b5cff",
+        weight: 3,
+        dashArray: "6 8",
+        opacity: 0.6,
+      }).addTo(mapa);
+    });
+  } else {
+    // Já existe: só atualiza o popup (partidas podem ter mudado)
+    marcadoresOnibus[linha.numero].bindPopup(
+      `<strong>🚌 Linha ${linha.numero}</strong><br>${linha.nome}<br>` +
+        `Partidas: ${linha.partidas.join(" · ")}`,
+    );
+  }
+}
+
+// Move todos os ônibus UM passo à frente na sua rota (chamado a cada 2s)
+function deslizarOnibus() {
+  Object.keys(rotasOnibus).forEach((numero) => {
+    const rota = rotasOnibus[numero];
+    const marcador = marcadoresOnibus[numero];
+    if (!rota || rota.length < 2 || !marcador) return;
+
+    // Avança o índice do ponto na rota (loop infinito: volta ao início).
+    // Procura na FROTA DA REGIÃO (que tem a posição local), não no JSON modelo.
+    const linha = (frotaRegiaoAtual ? frotaRegiaoAtual.linhas : todasLinhas)
+      .find((l) => l.numero === numero);
+    if (linha) {
+      linha._pontoRota = ((linha._pontoRota ?? 0) + 1) % rota.length;
+    }
+
+    const idx = linha ? linha._pontoRota : 0;
+    const novoPonto = rota[idx];
+    marcador.setLatLng(novoPonto); // move o ônibus pela rua real
+  });
+}
+
+/* ============================================================
+   BARRA 1: BUSCA POR CEP EXATO
    ============================================================ */
 async function buscarCepExato() {
   const campoCep = document.getElementById("buscaCep");
@@ -119,7 +264,7 @@ async function buscarCepExato() {
   infoCep.textContent = "🔎 Verificando CEP...";
 
   try {
-    // ViaCEP: se o CEP não existir, a API responde { erro: true }
+    // ViaCEP: se o CEP não existir, responde { erro: true }
     const resposta = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
     const dados = await resposta.json();
 
@@ -128,7 +273,6 @@ async function buscarCepExato() {
       return null;
     }
 
-    // CEP existe! Mostramos o endereço completo encontrado
     const endereco = [
       dados.logradouro,
       dados.bairro,
@@ -136,18 +280,16 @@ async function buscarCepExato() {
     ]
       .filter(Boolean)
       .join(", ");
-    infoCep.textContent = `✅ CEP exato: ${endereco}`;
 
     nomeRegiaoAtual = `${dados.bairro || dados.localidade}, ${dados.localidade}`;
 
-    // Coordenadas EXATAS da tabela (se existir) ...
+    // Coordenadas EXATAS da tabela (se existir)...
     const conhecido = CEP_CONHECIDOS[cep];
     if (conhecido) {
       localizacaoAtual = { lat: conhecido.lat, lon: conhecido.lon };
-      infoCep.textContent += ` — 🎯 posição exata encontrada (${conhecido.rotulo})`;
+      infoCep.textContent = `✅ CEP exato: ${endereco} — 🎯 posição exata (${conhecido.rotulo})`;
     } else {
-      // ... senão, usamos o CENTRO da cidade do CEP (posição aproximada,
-      // honesta: avisamos o usuário que é aproximada, não inventamos ponto)
+      // ... senão, centro da cidade (avisamos que é aproximado)
       const centrosCidade = {
         "São Paulo": { lat: -23.5505, lon: -46.6333 },
         Guarulhos: { lat: -23.4543, lon: -46.5337 },
@@ -159,72 +301,109 @@ async function buscarCepExato() {
       const centro =
         centrosCidade[dados.localidade] || centrosCidade["São Paulo"];
       localizacaoAtual = { lat: centro.lat, lon: centro.lon };
-      infoCep.textContent +=
-        ` — ⚠️ posição aproximada (centro de ${dados.localidade}); ` +
-        `use o GPS para precisão total.`;
+      infoCep.textContent = `✅ CEP: ${endereco} — ⚠️ posição aproximada (centro de ${dados.localidade}); use o GPS para precisão.`;
     }
 
     return localizacaoAtual;
   } catch (erro) {
-    infoCep.textContent =
-      "❌ Erro de rede ao consultar o CEP (verifique a internet).";
+    infoCep.textContent = "❌ Erro de rede ao consultar o CEP.";
     return null;
   }
 }
 
 /* ============================================================
    BARRA 2: FILTRO POR HORA
-   Mantém as linhas que têm ALGUMA partida >= hora digitada.
    ============================================================ */
 function filtraPorPartida(linha, horaMinima) {
-  if (!horaMinima) return true; // sem hora = mostra tudo
+  if (!horaMinima) return true;
   return linha.partidas.some((p) => p >= horaMinima);
 }
 
 /* ============================================================
-   BARRA 3: FILTRO POR NÚMERO DA LINHA (tolerante)
-   ------------------------------------------------------------
-   Normaliza os dois lados para comparar sem bronca de digitação:
-   - remove espaços, hífens e pontos: "SV 774" e "SV-774" = "SV774"
-   - ignora maiúsculas/minúsculas: "sv774" = "SV774"
-   - "774" também encontra "SV774" (busca parcial no número)
+   BARRA 3: FILTRO POR NÚMERO (tolerante)
+   "sv 774" / "SV-774" / "sv774" = "SV774"; "774" acha "SV774".
    ============================================================ */
 function normalizaNumero(texto) {
   return (texto || "").toUpperCase().replace(/[\s\-\.]/g, "");
 }
 
 function filtraPorNumero(linha, numeroDigitado) {
-  if (!numeroDigitado) return true; // campo vazio = sem filtro
-
+  if (!numeroDigitado) return true;
   const alvo = normalizaNumero(numeroDigitado);
   const numero = normalizaNumero(linha.numero);
-
-  // Contém? "774" acha "SV774"; "SV774" acha "SV774" (exato também passa)
   return numero.includes(alvo) || alvo.includes(numero);
 }
 
 /* ============================================================
    DISTÂNCIA (fórmula de Haversine)
-   Distância em linha reta entre dois pontos (lat/lon) da Terra.
    ============================================================ */
 function distanciaKm(lat1, lon1, lat2, lon2) {
-  const R = 6371; // raio da Terra em km
+  const R = 6371;
   const rad = Math.PI / 180;
-
   const dLat = (lat2 - lat1) * rad;
   const dLon = (lon2 - lon1) * rad;
-
   const a =
     Math.sin(dLat / 2) ** 2 +
     Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) ** 2;
-
   return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 /* ============================================================
+   VÍNCULO REGIÃO → ÔNIBUS DA REGIÃO
+   ------------------------------------------------------------
+   As linhas do onibus.json são "modelos" (número, nome, partidas).
+   Quando você busca um CEP (ou usa o GPS), GERAMOS a frota daquela
+   região: cada linha é posicionada ao redor do LOCAL BUSCADO
+   (espalhadas em raios de 0.5 a 6 km, em ângulos variados).
+   Assim o mapa vincula automaticamente os ônibus ao local exato.
+
+   Em produção, troque esta função pela API oficial da cidade
+   (ex: Olho Vivo/SPTrans para SP) que devolve os ônibus reais
+   daquela latitude/longitude — a estrutura já está pronta.
+   ============================================================ */
+let frotaRegiaoAtual = null; // linhas posicionadas na região buscada
+
+// Gera (ou reaproveita) a frota da região em torno de {lat, lon}
+function gerarFrotaDaRegiao(local) {
+  // Já geramos a frota desta mesma região? Reaproveita (evita os
+  // ônibus "teletransportarem" a cada re-busca).
+  if (
+    frotaRegiaoAtual &&
+    Math.abs(frotaRegiaoAtual.centro.lat - local.lat) < 0.001 &&
+    Math.abs(frotaRegiaoAtual.centro.lon - local.lon) < 0.001
+  ) {
+    return frotaRegiaoAtual.linhas;
+  }
+
+  // Ângulos fixos (graus) para espalhar as linhas em volta do local
+  const ANGULOS = [0, 40, 80, 120, 160, 200, 240, 280, 320, 350];
+  // Raios em km: metade das linhas perto (até 3km), metade mais longe
+  const RAIOS = [0.6, 1.2, 2.0, 2.8, 3.5, 4.2, 5.0, 5.8, 6.5, 7.2];
+
+  const grausParaKm = 111;
+  const cosLat = Math.cos(local.lat * (Math.PI / 180));
+
+  const linhas = todasLinhas.slice(0, ANGULOS.length).map((modelo, i) => {
+    const ang = (ANGULOS[i] * Math.PI) / 180;     // ângulo em radianos
+    const raio = RAIOS[i];                         // distância em km
+
+    // Converte "km ao norte" e "km a leste" em graus de lat/lon
+    const deltaLat = (raio * Math.sin(ang)) / grausParaKm;
+    const deltaLon = (raio * Math.cos(ang)) / (grausParaKm * cosLat);
+
+    return {
+      ...modelo,
+      lat: local.lat + deltaLat,
+      lon: local.lon + deltaLon,
+    };
+  });
+
+  frotaRegiaoAtual = { centro: { ...local }, linhas };
+  return linhas;
+}
+
+/* ============================================================
    FUNÇÃO PRINCIPAL: BUSCAR ÔNIBUS
-   Junta os 3 filtros (CEP/GPS + hora + número) e ordena
-   do mais próximo ao mais longe. Depois desenha o mapa 3D.
    ============================================================ */
 async function buscarOnibus() {
   await carregarLinhas();
@@ -232,50 +411,61 @@ async function buscarOnibus() {
   const resultados = document.getElementById("resultadosOnibus");
   if (!resultados) return;
 
-  // Sem localização? Tenta resolver pelo CEP digitado.
-  if (!localizacaoAtual) {
+  // CEP digitado? SEMPRE revalida (busca honesta a cada clique)
+  const campoCepInit = document.getElementById("buscaCep");
+  const digitouCep =
+    campoCepInit && campoCepInit.value.replace(/\D/g, "").length > 0;
+
+  if (digitouCep) {
     const viaCep = await buscarCepExato();
     if (!viaCep) {
-      resultados.innerHTML = `<p style="color:#ffd166">📍 Informe um CEP válido (8 números, exato) ou ative a localização do aparelho.</p>`;
+      resultados.innerHTML = `<p style="color:#ff6b7a">📍 Corrija o CEP (8 números, exato) ou limpe o campo para usar o GPS.</p>`;
       return;
     }
+  } else if (!localizacaoAtual) {
+    resultados.innerHTML = `<p style="color:#ffd166">📍 Informe um CEP válido (8 números, exato) ou ative a localização do aparelho.</p>`;
+    return;
   }
 
-  // Lê os filtros das outras duas barras
+  // VÍNCULO COM A REGIÃO: gera/posiciona os ônibus ao redor do
+  // local exato buscado (CEP ou GPS). Daqui pra frente, "todasLinhas"
+  // usadas na busca são as da REGIÃO, não as de SP fixas.
+  const linhasRegiao = gerarFrotaDaRegiao(localizacaoAtual);
+
+  // Filtros da barra de hora e do número
   const campoHora = document.getElementById("buscaHora");
   const campoNum = document.getElementById("buscaNumero");
   const hora = campoHora ? campoHora.value : "";
   const numero = campoNum ? campoNum.value : "";
 
-  // Aplica os filtros em cadeia (cada um devolve só o que passou)
-  let filtradas = todasLinhas
+  let filtradas = linhasRegiao
     .filter((l) => filtraPorPartida(l, hora))
     .filter((l) => filtraPorNumero(l, numero));
 
-  // Nada encontrado: mensagem específica dizendo QUAL filtro zerou
   if (filtradas.length === 0) {
     const motivo = numero
       ? `nenhuma linha com o número "${numero}" e partida${hora ? ` a partir de ${hora}` : ""}`
       : `nenhuma partida${hora ? ` a partir de ${hora}` : ""}`;
     resultados.innerHTML = `<p style="color:#ffd166">🕐 ${motivo}. Tente limpar um dos filtros.</p>`;
-    desenharMapa3D([]); // mapa sem ônibus
     return;
   }
 
-  // Calcula distância de cada linha até o usuário e ordena (mais perto primeiro)
-  const ordenadas = filtrmap((l) => ({
-    ...l,
-    distancia: distanciaKm(
-      localizacaoAtual.lat,
-      localizacaoAtual.lon,
-      l.lat,
-      l.lon,
-    ),
-  })).sort((a, b) => a.distancia - b.distancia);
+  // Ordena do mais próximo ao mais longe
+  const ordenadas = filtradas
+    .map((l) => ({
+      ...l,
+      distancia: distanciaKm(
+        localizacaoAtual.lat,
+        localizacaoAtual.lon,
+        l.lat,
+        l.lon,
+      ),
+    }))
+    .sort((a, b) => a.distancia - b.distancia);
 
-  ultimaBusca = ordenadas; // guarda para o mapa 3D / atualização
+  ultimaBusca = ordenadas;
 
-  // Monta os cartões de resultado (agora com o NÚMERO em destaque)
+  // Lista de resultados (com NÚMERO em destaque)
   resultados.innerHTML = `
     <h2 style="margin-top:20px">🚏 Ônibus próximos ${nomeRegiaoAtual ? "— " + nomeRegiaoAtual : ""}</h2>
     <ul class="lista-onibus">
@@ -296,12 +486,42 @@ async function buscarOnibus() {
         .join("")}
     </ul>`;
 
-  atualizarTemposReais(ordenadas, hora); // contagem regressiva
-  desenharMapa3D(ordenadas); // mapa 3D com essas linhas
+  atualizarTemposReais(ordenadas, hora);
+  atualizarMapa(ordenadas); // põe tudo no mapa real
 }
 
 /* ============================================================
-   TEMPO REAL: quanto falta para a próxima partida de cada linha
+   ATUALIZA O MAPA REAL (marcadores + rotas + você)
+   ============================================================ */
+function atualizarMapa(ordenadas) {
+  inicializarMapa();
+
+  // Limpa marcadores/rotas da região ANTERIOR (novo CEP = nova frota)
+  Object.values(marcadoresOnibus).forEach((m) => mapa.removeLayer(m));
+  Object.values(rotasOnibus).forEach((poly) => mapa.hasLayer(poly) && mapa.removeLayer(poly));
+  marcadoresOnibus = {};
+  rotasOnibus = {};
+
+  // Centraliza o mapa NO LOCAL EXATO buscado (CEP ou GPS)
+  mapa.setView([localizacaoAtual.lat, localizacaoAtual.lon], 13);
+
+  // Marcador verde "Você" (cria ou move)
+  if (!marcadorVoce) {
+    marcadorVoce = L.marker([localizacaoAtual.lat, localizacaoAtual.lon], {
+      icon: iconeVoce(),
+    })
+      .addTo(mapa)
+      .bindPopup("<strong>🟢 Você está aqui</strong>");
+  } else {
+    marcadorVoce.setLatLng([localizacaoAtual.lat, localizacaoAtual.lon]);
+  }
+
+  // Cria (ou atualiza) cada ônibus do resultado
+  ordenadas.forEach((linha) => criarOuAtualizarOnibusNoMapa(linha));
+}
+
+/* ============================================================
+   TEMPO REAL: contagem regressiva das partidas
    ============================================================ */
 function atualizarTemposReais(linhas, horaMinima) {
   const agora = new Date();
@@ -313,7 +533,6 @@ function atualizarTemposReais(linhas, horaMinima) {
     );
     if (!el) return;
 
-    // Primeira partida >= hora filtrada (ou >= agora)
     const limite = horaMinima ? horaMinima.split(":").map(Number) : null;
     const minutosLimite = limite ? limite[0] * 60 + limite[1] : minutosAgora;
 
@@ -327,7 +546,7 @@ function atualizarTemposReais(linhas, horaMinima) {
       const faltam = h * 60 + m - minutosAgora;
       el.textContent =
         faltam <= 0
-          ? `🟢 Em circulação agora`
+          ? "🟢 Em circulação agora"
           : `⏱️ Próximo em ${faltam} min (${proxima})`;
     } else {
       el.textContent = `🔴 Último ônibus já passou (${linha.partidas.at(-1)})`;
@@ -370,180 +589,38 @@ function usarMinhaLocalizacao() {
 }
 
 /* ============================================================
-   MAPA 3D (projeção isométrica em canvas)
-   ------------------------------------------------------------
-   Ideia didática: transformamos latitude/longitude em coordenadas
-   de tela usando uma PROJEÇÃO ISOMÉTRICA (como jogos antigos):
-     - eixo X da tela = (lon - lonVocê) escala  + (lat - latVocê) escala * 0.5
-     - eixo Y da tela = (lat - latVocê) escala  - (lon - lonVocê) escala * 0.5
-   Cada ônibus é desenhado como uma torre 3D com a placa do número.
-   Você (verde) fica no centro exato do mapa.
+   BOTÃO "TEMPO REAL": liga/desliga os dois relógios
+   - lento (15s): refaz a busca (ordenamento/lista)
+   - rápido (2s): desliza os ônibus pela rota nas ruas reais
    ============================================================ */
-function desenharMapa3D(linhas) {
-  const canvas = document.getElementById("mapa3d");
-  if (!canvas) return;
+let intervaloDesliza = null;
 
-  const ctx = canvas.getContext("2d");
-  const W = canvas.width,
-    H = canvas.height;
-
-  // Fundo (céu gradiente) — redesenhamos tudo a cada frame
-  const fundo = ctx.createLinearGradient(0, 0, 0, H);
-  fundo.addColorStop(0, "#1b0f3b");
-  fundo.addColorStop(1, "#2a1560");
-  ctx.fillStyle = fundo;
-  ctx.fillRect(0, 0, W, H);
-
-  // Se não há linhas para desenhar, só mostra o mapa vazio
-  if (!linhas || linhas.length === 0) {
-    ctx.fillStyle = "rgba(255,255,255,0.6)";
-    ctx.font = "16px Segoe UI";
-    ctx.textAlign = "center";
-    ctx.fillText("Sem ônibus para mostrar — faça uma busca 🚌", W / 2, H / 2);
-    return;
-  }
-
-  // ESCALA do mapa: km -> pixels. Ajusta automaticamente para caber
-  // a linha mais distante na metade da tela (auto-zoom).
-  const maiorDist = Math.max(...linhas.map((l) => l.distancia), 0.5);
-  const escala = (Math.min(W, H) * 0.42) / maiorDist; // pixels por km
-
-  // Projeção isométrica de uma posição geográfica -> tela
-  const centroX = W / 2,
-    centroY = H * 0.6; // você fica aqui
-  function projeta(lat, lon) {
-    const dLat = (localizacaoAtual.lat - lat) * escala * 6; // 6 = zoom fino
-    const dLon = (localizacaoAtual.lon - lon) * escala * 6;
-    // rotação isométrica clássica (eixo 45°/30°)
-    return {
-      x: centroX + (dLon - dLat * 0.5),
-      y: centroY + (dLat * 0.5 + dLon * -0.5) * 0.6,
-    };
-  }
-
-  // ---------- CHÃO (losango isométrico) ----------
-  ctx.save();
-  ctx.translate(centroX, centroY);
-  ctx.fillStyle = "rgba(122,52,255,0.12)";
-  ctx.strokeStyle = "rgba(122,52,255,0.35)";
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(0, -H * 0.42);
-  ctx.lineTo(W * 0.46, 0);
-  ctx.lineTo(0, H * 0.34);
-  ctx.lineTo(-W * 0.46, 0);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  // linhas de grade no chão (efeito 3D de tabuleiro)
-  ctx.strokeStyle = "rgba(255,255,255,0.06)";
-  for (let i = -5; i <= 5; i++) {
-    ctx.beginPath();
-    ctx.moveTo(i * W * 0.045, -H * 0.3);
-    ctx.lineTo(i * W * 0.045, H * 0.26);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(-W * 0.42, i * H * 0.028);
-    ctx.lineTo(W * 0.42, i * H * 0.028);
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  // ---------- ORDENA DO FUNDO PARA A FRENTE (profundidade 3D) ----------
-  // Em isométrico, quem tem Y MENOR está "mais atrás" — desenha primeiro.
-  const comPosicao = linhas
-    .map((l) => {
-      const p = projeta(l.lat, l.lon);
-      return { ...l, tela: p };
-    })
-    .sort((a, b) => a.tela.y - b.tela.y);
-
-  // ---------- TORRES 3D DE CADA ÔNIBUS ----------
-  comPosicao.forEach((l) => {
-    const { x, y } = l.tela;
-    const altura = 30 + (l.distancia < 3 ? 30 : 14); // mais perto = torre maior
-    const largura = 26;
-
-    // Sombra no chão
-    ctx.fillStyle = "rgba(0,0,0,0.35)";
-    ctx.beginPath();
-    ctx.ellipse(x, y, largura * 0.8, largura * 0.35, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Face frontal da torre
-    ctx.fillStyle = "#7a3cff";
-    ctx.beginPath();
-    ctx.rect(x - largura / 2, y - altura, largura, altura);
-    ctx.fill();
-
-    // Face lateral (para dar sensação de volume 3D)
-    ctx.fillStyle = "#5b28c4";
-    ctx.beginPath();
-    ctx.moveTo(x + largura / 2, y - altura);
-    ctx.lineTo(x + largura / 2 + 9, y - altura + 5);
-    ctx.lineTo(x + largura / 2 + 9, y + 5);
-    ctx.lineTo(x + largura / 2, y);
-    ctx.closePath();
-    ctx.fill();
-
-    // Face do topo
-    ctx.fillStyle = "#9b5cff";
-    ctx.beginPath();
-    ctx.moveTo(x - largura / 2, y - altura);
-    ctx.lineTo(x - largura / 2 + 9, y - altura - 5);
-    ctx.lineTo(x + largura / 2 + 9, y - altura - 5);
-    ctx.lineTo(x + largura / 2, y - altura);
-    ctx.closePath();
-    ctx.fill();
-
-    // Placa com o NÚMERO do ônibus (712, SV774, 959...) no topo da torre
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 13px Segoe UI";
-    ctx.textAlign = "center";
-    ctx.fillText(l.numero, x, y - altura - 12);
-
-    // Distância embaixo da torre
-    ctx.fillStyle = "rgba(255,255,255,0.75)";
-    ctx.font = "11px Segoe UI";
-    ctx.fillText(`${l.distancia.toFixed(1)} km`, x, y + 16);
-  });
-
-  // ---------- VOCÊ no centro (ponto verde pulsante) ----------
-  ctx.fillStyle = "#2ecc71";
-  ctx.beginPath();
-  ctx.arc(centroX, centroY, 9, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = "rgba(46,204,113,0.5)";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.arc(centroX, centroY, 16, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 12px Segoe UI";
-  ctx.fillText("VOCÊ", centroX, centroY + 32);
-}
-
-/* ============================================================
-   BOTÃO "TEMPO REAL": liga/desliga o loop automático (15s)
-   ============================================================ */
 function iniciarTempoReal() {
   const status = document.getElementById("statusLocalizacao");
   const botao = document.getElementById("btnTempoReal");
   if (!status) return;
 
   if (intervaloReal) {
-    // já ligado -> desligar (toggle)
+    // já ligado -> desligar os dois relógios
     clearInterval(intervaloReal);
+    clearInterval(intervaloDesliza);
     intervaloReal = null;
-    status.textContent = "⏸️ Atualização em tempo real desligada.";
+    intervaloDesliza = null;
+    status.textContent = "⏸️ Tempo real desligado.";
     if (botao) botao.textContent = "▶️ Ativar atualização em tempo real (15s)";
     return;
   }
 
+  // Relógio lento: refaz a busca
   intervaloReal = setInterval(buscarOnibus, INTERVALO_TEMPORAL_MS);
-  status.textContent = `🔄 Tempo real ativado — atualizando a cada ${INTERVALO_TEMPORAL_MS / 1000}s.`;
+  // Relógio rápido: move os ônibus pelas ruas
+  intervaloDesliza = setInterval(deslizarOnibus, TICK_DESLIZA_MS);
+
+  status.textContent =
+    `🔄 Tempo real ATIVO — ônibus deslizando pelas ruas a cada ${TICK_DESLIZA_MS / 1000}s ` +
+    `e busca geral a cada ${INTERVALO_TEMPORAL_MS / 1000}s.`;
   if (botao) botao.textContent = "⏸️ Parar tempo real";
-  buscarOnibus(); // primeira atualização imediata
+  buscarOnibus();
 }
 
 /* ============================================================
@@ -551,28 +628,24 @@ function iniciarTempoReal() {
    ============================================================ */
 document.addEventListener("DOMContentLoaded", async () => {
   await carregarLinhas();
+  inicializarMapa(); // mapa já aparece com as ruas de SP
 
-  // Barra de hora já começa com a hora atual do aparelho
+  // Hora padrão = agora
   const campoHora = document.getElementById("buscaHora");
   if (campoHora) {
     const agora = new Date();
     campoHora.value = `${String(agora.getHours()).padStart(2, "0")}:${String(agora.getMinutes()).padStart(2, "0")}`;
   }
 
-  // Enter no CEP busca direto
+  // Enter em CEP e número busca direto
   const campoCep = document.getElementById("buscaCep");
   if (campoCep)
     campoCep.addEventListener("keypress", (e) => {
       if (e.key === "Enter") buscarOnibus();
     });
-
-  // Enter no número da linha também busca
   const campoNum = document.getElementById("buscaNumero");
   if (campoNum)
     campoNum.addEventListener("keypress", (e) => {
       if (e.key === "Enter") buscarOnibus();
     });
-
-  // Mapa inicial vazio (só o tabuleiro 3D)
-  desenharMapa3D([]);
 });
