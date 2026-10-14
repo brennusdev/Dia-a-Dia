@@ -1,0 +1,198 @@
+{
+  "_comentario": "Dados DEMO de linhas de ônibus de SP com NUMEROS REAIS de linhas (712, 774, SV774, 959...). 'lat/lon' = ponto de parada. Troque por uma API real (GTFS/SPTrans) quando quiser.",
+  "linhas": [
+    {
+      "id": 1,
+      "numero": "712",
+      "nome": "Term. Pq. D. Pedro II ↔ Term. Pirituba",
+      "lat": -23.5205,
+      "lon": -46.653,
+      "partidas": [
+        "05:30",
+        "06:15",
+        "07:00",
+        "07:45",
+        "08:30",
+        "12:00",
+        "17:00",
+        "18:30"
+      ]
+    },
+    {
+      "id": 2,
+      "numero": "774",
+      "nome": "Term. Princesa Isabel ↔ Term. Pq. D. Pedro II",
+      "lat": -23.5435,
+      "lon": -46.642,
+      "partidas": [
+        "06:00",
+        "06:45",
+        "07:30",
+        "08:15",
+        "13:00",
+        "17:30",
+        "19:00"
+      ]
+    },
+    {
+      "id": 3,
+      "numero": "SV774",
+      "nome": "Term. Princesa Isabel ↔ Term. A. Espanha",
+      "lat": -23.5345,
+      "lon": -46.635,
+      "partidas": [
+        "05:45",
+        "06:30",
+        "07:15",
+        "08:00",
+        "12:30",
+        "17:15",
+        "18:45"
+      ]
+    },
+    {
+      "id": 4,
+      "numero": "959",
+      "nome": "Term. Mercado ↔ Term. Pq. Rangel",
+      "lat": -23.56,
+      "lon": -46.585,
+      "partidas": [
+        "06:10",
+        "07:05",
+        "07:50",
+        "08:35",
+        "13:30",
+        "17:45",
+        "19:15"
+      ]
+    },
+    {
+      "id": 5,
+      "numero": "707",
+      "nome": "Circular Centro ↔ Term. Pq. D. Pedro II",
+      "lat": -23.561,
+      "lon": -46.68,
+      "partidas": [
+        "06:20",
+        "07:10",
+        "07:55",
+        "08:40",
+        "14:00",
+        "18:00",
+        "19:30"
+      ]
+    },
+    {
+      "id": 6,
+      "numero": "867",
+      "nome": "Jd. Paulista ↔ Estação da Luz",
+      "lat": -23.562,
+      "lon": -46.655,
+      "partidas": [
+        "05:50",
+        "06:35",
+        "07:20",
+        "08:05",
+        "12:45",
+        "17:10",
+        "18:40"
+      ]
+    },
+    {
+      "id": 7,
+      "numero": "174",
+      "nome": "Term. Santana ↔ Jd. Primavera",
+      "lat": -23.495,
+      "lon": -46.625,
+      "partidas": [
+        "06:05",
+        "06:50",
+        "07:35",
+        "08:20",
+        "13:15",
+        "17:35",
+        "19:05"
+      ]
+    },
+    {
+      "id": 8,
+      "numero": "178",
+      "nome": "Term. Jd. São Paulo ↔ Estação Jabaquara",
+      "lat": -23.645,
+      "lon": -46.64,
+      "partidas": [
+        "06:15",
+        "07:00",
+        "07:45",
+        "08:30",
+        "13:45",
+        "17:50",
+        "19:20"
+      ]
+    },
+    {
+      "id": 9,
+      "numero": "917",
+      "nome": "Term. Lapa ↔ Jd. Maracanã",
+      "lat": -23.501,
+      "lon": -46.68,
+      "partidas": [
+        "06:25",
+        "07:15",
+        "08:00",
+        "08:45",
+        "14:15",
+        "18:10",
+        "19:40"
+      ]
+    },
+    {
+      "id": 10,
+      "numero": "408",
+      "nome": "Term. Freguesia do Ó ↔ Estação da Luz",
+      "lat": -23.552,
+      "lon": -46.628,
+      "partidas": [
+        "06:00",
+        "06:40",
+        "07:25",
+        "08:10",
+        "12:15",
+        "17:05",
+        "18:35"
+      ]
+    },
+    {
+      "id": 11,
+      "numero": "N103",
+      "nome": "Jd. Rubi ↔ Metrô Belém (Noturno)",
+      "lat": -23.539,
+      "lon": -46.575,
+      "partidas": [
+        "23:30",
+        "00:10",
+        "00:50",
+        "01:30",
+        "02:10",
+        "03:30",
+        "04:30"
+      ]
+    },
+    {
+      "id": 12,
+      "numero": "648",
+      "nome": "Vila Mascote ↔ Hospital Albert Einstein",
+      "lat": -23.618,
+      "lon": -46.695,
+      "partidas": [
+        "06:05",
+        "06:50",
+        "07:35",
+        "08:20",
+        "13:15",
+        "17:35",
+        "19:05"
+      ]
+    }
+  ]
+}
