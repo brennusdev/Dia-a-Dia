@@ -37,11 +37,12 @@ Projeto Dia a Dia/
 
 Como funciona (tudo em `recursos/js/onibus.js`, comentado):
 
-1. **Barra de REGIÃO (CEP)** — consulta a [API ViaCEP](https://viacep.com.br) (grátis, sem chave) para identificar bairro/cidade e localizar a região.
+1. **Barra de REGIÃO (CEP exato)** — consulta a [API ViaCEP](https://viacep.com.br); só aceita CEP existente (8 dígitos). Se o CEP está na tabela interna, usa posição exata; senão avisa que é aproximada.
 2. **Barra de HORA** — filtra apenas as linhas com partida a partir do horário escolhido.
-3. **Localização do aparelho** — botão "Usar minha localização" usa a API `navigator.geolocation` (funciona em celular, tablet, notebook e PC; o navegador pede permissão).
-4. **Resultado** — ônibus ordenados do mais próximo ao mais longe (fórmula de Haversine), com contagem regressiva da próxima partida.
-5. **Tempo real** — botão "Ativar atualização" refaz a busca a cada 15 s com `setInterval`.
+3. **Barra de NÚMERO** — busca tolerante por número de linha: `sv 774`, `SV-774` e `774` encontram a `SV774`.
+4. **Localização do aparelho** — `navigator.geolocation` (celular, tablet, notebook e PC; o navegador pede permissão).
+5. **Mapa com RUAS REAIS** — [Leaflet](https://leafletjs.com) + OpenStreetMap (gratuito, sem chave): as ruas de verdade aparecem no mapa e cada ônibus é uma placa com o número da linha. As rotas entre você e a parada seguem **ruas reais** calculadas pelo [OSRM](http://project-osrm.org) (com fallback para linha reta se o serviço estiver fora).
+6. **Tempo real** — dois relógios: um desliza os ônibus pelas ruas a cada 2s, outro refaz a busca a cada 15s (`setInterval`).
 
 > ⚠️ A geolocalização só funciona em HTTPS ou `localhost`. Use a extensão Live Server do VS Code (ou `python -m http.server`) para abrir o projeto.
 
