@@ -8,7 +8,8 @@
     2) Barra de busca por HORA                -> filtro local
     3) Barra de busca por NÚMERO da linha     -> ex: 712, 774, SV774, 959
     4) Geolocalização do aparelho (GPS)       -> API Geolocation
-    5) MAPA 3D (projeção isométrica em canvas) mostrando ônibus e você
+    5) MAPA REAL com RUAS DE VERDADE (Leaflet + OpenStreetMap): os ônibus
+       se movem em tempo real por rotas de ruas reais (OSRM)
   ============================================================
 -->
 <html lang="pt-br">
@@ -24,6 +25,8 @@
 
     <!-- CSS global do projeto -->
     <link rel="stylesheet" href="../recursos/css/style.css" />
+    <!-- Leaflet: biblioteca de mapas que desenha as RUAS REAIS (OpenStreetMap) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   </head>
   <body>
     <div class="pagina-box" style="max-width: 1000px">
@@ -89,24 +92,20 @@
       <!-- Status (GPS / tempo real / erros) -->
       <p id="statusLocalizacao" class="status" aria-live="polite"></p>
 
-      <!-- ================= MAPA 3D (canvas isométrico) ================= -->
-      <div class="mapa-3d-box">
-        <h2>🗺️ Mapa 3D — posição dos ônibus</h2>
+      <!-- ============ MAPA REAL (ruas de verdade, Leaflet + OSM) ============
+           O mapa mostra as ruas reais e o onibus.js anima os ônibus
+           percorrendo essas ruas no tempo real (rotas do OSRM). -->
+      <div class="mapa-box">
+        <h2>🗺️ Mapa em tempo real — ruas reais</h2>
         <p class="mapa-legenda">
-          <span class="leg-onibus">🟣 Ônibus</span>
-          <span class="leg-voce">🟢 Você</span>
-          <span class="leg-selecionado">🟡 Selecionado</span>
+          <span class="leg-onibus">🟣 Ônibus em circulação</span>
+          <span class="leg-voce">🟢 Você (GPS/CEP)</span>
         </p>
-        <!-- O desenho 3D é feito via canvas pelo onibus.js -->
-        <canvas
-          id="mapa3d"
-          width="900"
-          height="420"
-          aria-label="Mapa 3D dos ônibus"
-        ></canvas>
+        <!-- Div onde o Leaflet monta o mapa (altura definida no CSS) -->
+        <div id="mapaReal" aria-label="Mapa em tempo real dos ônibus"></div>
         <p class="mapa-dica">
-          Vista isométrica: cada prédio marca a parada da linha (com o número do
-          ônibus). Seu ponto verde é o centro do mapa.
+          Os ônibus se movem pelas ruas reais no tempo real — clique em um
+          ônibus para ver a linha e a próxima partida.
         </p>
       </div>
 
@@ -121,7 +120,9 @@
       <a href="../paginas/index.html" class="voltar">⬅️ Voltar ao Menu</a>
     </div>
 
-    <!-- Lógica: busca, ViaCEP, GPS, tempo real e desenho do mapa 3D -->
+    <!-- Leaflet JS (lógica do mapa) — deve vir ANTES do nosso script -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Lógica: busca, ViaCEP, GPS, tempo real e mapa com ruas reais -->
     <script src="../recursos/js/onibus.js"></script>
   </body>
 </html>
