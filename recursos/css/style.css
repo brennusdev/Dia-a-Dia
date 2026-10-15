@@ -413,6 +413,58 @@ button:hover {
    ÔNIBUS — MAPA REAL (Leaflet + OpenStreetMap, ruas de verdade)
    ============================================================ */
 
+/* ============ FAVORITOS DE CEP ============ */
+.favoritos-box {
+    margin: 20px 0;
+    padding: 16px 20px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 20px;
+}
+
+.lista-favoritos {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.favorito-item {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.favorito-usar {
+    flex: 1;
+    text-align: left;
+    font-size: 13.5px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 209, 102, 0.12);
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.favorito-usar:hover {
+    background: rgba(255, 209, 102, 0.28);
+}
+
+.favorito-remover {
+    font-size: 14px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 107, 122, 0.35);
+    background: rgba(255, 107, 122, 0.12);
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.favorito-remover:hover {
+    background: rgba(255, 107, 122, 0.3);
+}
+
 /* Caixa que envolve o mapa */
 .mapa-box {
     margin: 25px 0;
@@ -422,11 +474,36 @@ button:hover {
     border-radius: 20px;
 }
 
-/* Altura fixa do mapa (Leaflet exige altura definida) */
+/* Altura fixa do mapa (MapLibre GL exige altura definida) */
 #mapaReal {
     height: 480px;
     border-radius: 14px;
-    z-index: 1; /* mantém abaixo dos botões do próprio Leaflet */
+    overflow: hidden;
+    z-index: 1; /* mantém abaixo dos controles do próprio MapLibre */
+}
+
+/* Controles da câmera 3D (girar / inclinar / prédios) */
+.controles-3d {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 10px 0 14px;
+}
+
+.controles-3d button {
+    font-size: 13px;
+    padding: 6px 14px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    background: rgba(122, 60, 255, 0.18);
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.controles-3d button:hover {
+    background: rgba(122, 60, 255, 0.4);
 }
 
 /* Legenda colorida acima do mapa */
