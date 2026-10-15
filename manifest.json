@@ -1,0 +1,26 @@
+{
+  "name": "Dia a Dia — Ônibus em Tempo Real",
+  "short_name": "Dia a Dia",
+  "description": "Planner de produtividade com ônibus/metrô em tempo real em mapa 3D.",
+  "lang": "pt-br",
+  "start_url": "./paginas/onibus.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f0f17",
+  "theme_color": "#7a3cff",
+  "icons": [
+    {
+      "src": "recursos/img/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "recursos/img/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
