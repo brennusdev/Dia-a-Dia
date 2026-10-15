@@ -8,8 +8,9 @@
     2) Barra de busca por HORA                -> filtro local
     3) Barra de busca por NÚMERO da linha     -> ex: 712, 774, SV774, 959
     4) Geolocalização do aparelho (GPS)       -> API Geolocation
-    5) MAPA REAL com RUAS DE VERDADE (Leaflet + OpenStreetMap): os ônibus
-       se movem em tempo real por rotas de ruas reais (OSRM)
+    5) MAPA 3D com RUAS E PRÉDIOS DE VERDADE (MapLibre GL + OpenStreetMap):
+       os ônibus se movem em tempo real por rotas de ruas reais (OSRM);
+       câmera inclinada e giratória, estilo navegação da Tesla
   ============================================================
 -->
 <html lang="pt-br">
@@ -21,12 +22,22 @@
       http-equiv="Content-Security-Policy"
       content="upgrade-insecure-requests"
     />
+    <!-- PWA: torna o app instalável (ícone, cores, modo standalone) -->
+    <link rel="manifest" href="../manifest.json" />
+    <link rel="icon" href="../recursos/img/icon-192.png" type="image/png" />
+    <meta name="theme-color" content="#7a3cff" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
     <title>Ônibus em Tempo Real</title>
 
     <!-- CSS global do projeto -->
     <link rel="stylesheet" href="../recursos/css/style.css" />
-    <!-- Leaflet: biblioteca de mapas que desenha as RUAS REAIS (OpenStreetMap) -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- MapLibre GL: motor de mapa 3D (prédios, câmera inclinada e giratória) -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css"
+    />
   </head>
   <body>
     <div class="pagina-box" style="max-width: 1000px">
@@ -51,6 +62,42 @@
             autocomplete="postal-code"
           />
           <p id="cepInfo" class="cep-info" aria-live="polite"></p>
+        </div>
+
+        <!-- BARRA 1b: ESTADO (UF) — ajuda o geocodificador a achar o CEP
+             na cidade certa (CEPs podem repetir entre cidades/estados) -->
+        <div class="campo-busca">
+          <label for="buscaEstado">🗺️ Estado (UF)</label>
+          <select id="buscaEstado">
+            <option value="">Detectar automático</option>
+            <option value="AC">AC — Acre</option>
+            <option value="AL">AL — Alagoas</option>
+            <option value="AP">AP — Amapá</option>
+            <option value="AM">AM — Amazonas</option>
+            <option value="BA">BA — Bahia</option>
+            <option value="CE">CE — Ceará</option>
+            <option value="DF">DF — Distrito Federal</option>
+            <option value="ES">ES — Espírito Santo</option>
+            <option value="GO">GO — Goiás</option>
+            <option value="MA">MA — Maranhão</option>
+            <option value="MT">MT — Mato Grosso</option>
+            <option value="MS">MS — Mato Grosso do Sul</option>
+            <option value="MG">MG — Minas Gerais</option>
+            <option value="PA">PA — Pará</option>
+            <option value="PB">PB — Paraíba</option>
+            <option value="PR">PR — Paraná</option>
+            <option value="PE">PE — Pernambuco</option>
+            <option value="PI">PI — Piauí</option>
+            <option value="RJ">RJ — Rio de Janeiro</option>
+            <option value="RN">RN — Rio Grande do Norte</option>
+            <option value="RS">RS — Rio Grande do Sul</option>
+            <option value="RO">RO — Rondônia</option>
+            <option value="RR">RR — Roraima</option>
+            <option value="SC">SC — Santa Catarina</option>
+            <option value="SP" selected>SP — São Paulo</option>
+            <option value="SE">SE — Sergipe</option>
+            <option value="TO">TO — Tocantins</option>
+          </select>
         </div>
 
         <!-- BARRA 2: horário mínimo de partida -->
@@ -89,6 +136,27 @@
         ▶️ Ativar atualização em tempo real (15s)
       </button>
 
+      <!-- ================= FAVORITOS DE CEP (localStorage) ================= -->
+      <div class="favoritos-box">
+        <h2 style="margin: 0 0 8px">⭐ Meus CEPs favoritos</h2>
+        <p style="font-size: 13px; opacity: 0.75; margin: 0 0 10px">
+          Salve os CEPs que você usa todo dia (casa, trabalho, faculdade) e
+          busque-os com 1 clique. Ficam gravados no seu aparelho.
+        </p>
+        <div id="listaFavoritos" class="lista-favoritos">
+          <!-- preenchido pelo onibus.js -->
+        </div>
+        <button
+          type="button"
+          class="btn-secundario"
+          id="btnSalvarFavorito"
+          onclick="salvarFavoritoDoCampo()"
+          style="margin-top: 10px"
+        >
+          ⭐ Salvar CEP digitado como favorito
+        </button>
+      </div>
+
       <!-- Status (GPS / tempo real / erros) -->
       <p id="statusLocalizacao" class="status" aria-live="polite"></p>
 
@@ -96,16 +164,25 @@
            O mapa mostra as ruas reais e o onibus.js anima os ônibus
            percorrendo essas ruas no tempo real (rotas do OSRM). -->
       <div class="mapa-box">
-        <h2>🗺️ Mapa em tempo real — ruas reais</h2>
+        <h2>🗺️ Mapa 3D em tempo real</h2>
         <p class="mapa-legenda">
           <span class="leg-onibus">🟣 Ônibus em circulação</span>
           <span class="leg-voce">🟢 Você (GPS/CEP)</span>
         </p>
-        <!-- Div onde o Leaflet monta o mapa (altura definida no CSS) -->
-        <div id="mapaReal" aria-label="Mapa em tempo real dos ônibus"></div>
+        <!-- Controles da câmera 3D (estilo navegação) -->
+        <div class="controles-3d">
+          <button type="button" onclick="girarCamera(-30)">↺ Girar</button>
+          <button type="button" onclick="girarCamera(30)">Girar ↻</button>
+          <button type="button" onclick="inclinacaoCamera(-10)">⬆️ Mais alto</button>
+          <button type="button" onclick="inclinacaoCamera(10)">⬇️ Mais 3D</button>
+          <button type="button" id="btnModo3D" onclick="alternar3D()">🏙️ Prédios 3D: ON</button>
+        </div>
+        <!-- Div onde o MapLibre monta o mapa 3D (altura definida no CSS) -->
+        <div id="mapaReal" aria-label="Mapa 3D em tempo real dos ônibus"></div>
         <p class="mapa-dica">
-          Os ônibus se movem pelas ruas reais no tempo real — clique em um
-          ônibus para ver a linha e a próxima partida.
+          Segure o botão direito do mouse (ou dois dedos) e arraste para girar e
+          inclinar a câmera, como no GPS da Tesla. Clique em um ônibus para ver
+          a linha e a próxima partida.
         </p>
       </div>
 
@@ -120,9 +197,20 @@
       <a href="../paginas/index.html" class="voltar">⬅️ Voltar ao Menu</a>
     </div>
 
-    <!-- Leaflet JS (lógica do mapa) — deve vir ANTES do nosso script -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <!-- Lógica: busca, ViaCEP, GPS, tempo real e mapa com ruas reais -->
+    <!-- MapLibre GL JS (lógica do mapa 3D) — deve vir ANTES do nosso script -->
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+    <!-- Lógica: busca, ViaCEP, GPS, tempo real e mapa 3D com ruas reais -->
     <script src="../recursos/js/onibus.js"></script>
+    <!-- PWA: registra o service worker (offline + instalável) -->
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker
+            .register("../sw.js")
+            .then((reg) => console.log("✅ PWA ativo:", reg.scope))
+            .catch((e) => console.log("PWA indisponível (ok em dev):", e.message));
+        });
+      }
+    </script>
   </body>
 </html>
