@@ -9,10 +9,11 @@
    3) NÚMERO      -> busca por número da linha (712, SV774, 959...),
                      tolerante (ignora espaços/hífen/maiúsculas).
    4) GPS         -> navigator.geolocation (celular/PC), alta precisão.
-   5) MAPA REAL   -> Leaflet + OpenStreetMap: RUAS DE VERDADE.
-                     Cada ônibus é um marcador que anda pela rua real
-                     (rota calculada pelo OSRM, servidor público).
-                     Você é um marcador verde no mapa.
+   5) MAPA 3D     -> MapLibre GL + OpenStreetMap: RUAS E PRÉDIOS DE VERDADE.
+                      Cada ônibus é um marcador que anda pela rua real
+                      (rota calculada pelo OSRM, servidor público).
+                      Você é um marcador verde no mapa.
+                      Câmera inclinada/giratória estilo navegação (Tesla).
    6) TEMPO REAL  -> dois relógios:
                      - relógio rápido (1s): desliza os ônibus pela rota;
                      - relógio lento (15s): refaz a busca/ordenamento.
@@ -27,8 +28,9 @@ let nomeRegiaoAtual = ""; // bairro/cidade detectado
 let todasLinhas = []; // cache do onibus.json
 let ultimaBusca = null; // últimas linhas ordenadas (para o mapa)
 
-/* ---------- MAPA (Leaflet) ---------- */
-let mapa = null; // objeto do mapa Leaflet
+/* ---------- MAPA 3D (MapLibre GL) ---------- */
+let mapa = null; // objeto do mapa MapLibre
+let modo3D = true; // prédios em 3D ligados?
 let marcadorVoce = null; // marcador verde "Você"
 let marcadoresOnibus = {}; // { numero: marcador } de cada ônibus
 let rotasOnibus = {}; // { numero: [lat,lon, lat,lon...] } rota na rua real
@@ -98,45 +100,101 @@ async function carregarLinhas() {
 }
 
 /* ============================================================
-   MAPA REAL COM RUAS DE VERDADE (Leaflet + OpenStreetMap)
+   MAPA 3D COM RUAS DE VERDADE (MapLibre GL + OpenStreetMap)
    ------------------------------------------------------------
-   - tileLayer do OSM: são as "imagens das ruas" (o mapa de verdade);
-   - marcador de ônibus: ícone roxo com o NÚMERO da linha;
-   - clique no ônibus: mostra linha, nome e próxima partida.
+   - Estilo "osm-bright" da demo da MapLibre (grátis, sem chave):
+     inclui CAMADA DE PRÉDIOS 3D (fill-extrusion) — o mesmo tipo
+     de visual da tela de navegação da Tesla;
+   - Câmera INCLINADA (pitch 55°) como num GPS;
+   - Cada ônibus é um marcador HTML que anda pela rua real
+     (rota calculada pelo OSRM). Você é um marcador verde.
    ============================================================ */
 function inicializarMapa() {
   if (mapa) return; // já criado (evita recriar ao re-buscar)
 
-  // Cria o mapa centrado em São Paulo (zoom 12 = cidade inteira).
-  // Guardamos também em window._mapa (útil para depuração no console F12).
-  mapa = L.map("mapaReal").setView([-23.5505, -46.6333], 12);
+  // Cria o mapa 3D centrado em São Paulo, inclinado como num GPS.
+  // window._mapa fica exposto para depuração no console (F12).
+  mapa = new maplibregl.Map({
+    container: "mapaReal",
+    style: "https://tiles.openfreemap.org/styles/liberty",
+    center: [-46.6333, -23.5505],
+    zoom: 13,
+    pitch: 55, // inclinação da câmera (0 = topo, 85 = quase rasante)
+    bearing: -20, // rotação inicial da câmera
+    hash: false,
+  });
   window._mapa = mapa;
 
-  // Camada de TILES = as ruas reais desenhadas pelo OpenStreetMap
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: "© OpenStreetMap",
-  }).addTo(mapa);
+  mapa.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
+
+  // Quando o estilo terminar de carregar, montamos a camada de PRÉDIOS 3D.
+  // O estilo da OpenFreeMap já traz a fonte vetorial "openmaptiles" (OSM);
+  // adicionamos por cima um fill-extrusion com os PRÉDIOS em volume.
+  mapa.on("load", () => {
+    try {
+      if (!mapa.getSource("openmaptiles")) return; // estilo sem fonte vetorial
+
+      mapa.addLayer({
+        id: "predios-3d",
+        type: "fill-extrusion",
+        source: "openmaptiles",
+        "source-layer": "building",
+        minzoom: 13,
+        paint: {
+          // Altura real do prédio quando existir; senão 8m padrão
+          "fill-extrusion-height": [
+            "coalesce",
+            ["get", "render_height"],
+            ["get", "height"],
+            8,
+          ],
+          "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
+          "fill-extrusion-color": "#8a7bd8",
+          "fill-extrusion-opacity": 0.55,
+        },
+      });
+    } catch (e) {
+      // Estilo sem prédios disponível — o mapa continua 2D inclinado
+      console.warn("Prédios 3D indisponíveis neste estilo:", e);
+    }
+  });
+}
+
+// Controles da câmera (botões na página)
+function girarCamera(delta) {
+  if (mapa) mapa.easeTo({ bearing: mapa.getBearing() + delta, duration: 400 });
+}
+function inclinacaoCamera(delta) {
+  if (mapa) {
+    const novo = Math.min(75, Math.max(0, mapa.getPitch() + delta));
+    mapa.easeTo({ pitch: novo, duration: 400 });
+  }
+}
+// Liga/desliga os prédios em 3D
+function alternar3D() {
+  if (!mapa) return;
+  modo3D = !modo3D;
+  const btn = document.getElementById("btnModo3D");
+  if (btn) btn.textContent = modo3D ? "🏙️ Prédios 3D: ON" : "🏙️ Prédios 3D: OFF";
+  const camada = mapa.getLayer("predios-3d");
+  if (camada) mapa.setLayoutProperty("predios-3d", "visibility", modo3D ? "visible" : "none");
 }
 
 // Ícone de ônibus: um retângulo roxo com o número da linha dentro (HTML/CSS)
-function iconeOnibus(numero, proximaPartida) {
-  return L.divIcon({
-    className: "icone-onibus",
-    html: `<div class="placa-onibus" title="Linha ${numero} — próxima partida ${proximaPartida}">🚌 ${numero}</div>`,
-    iconSize: [null, null], // o HTML define o tamanho
-    iconAnchor: [24, 14], // ponto do ícone que "encosta" no mapa
-  });
+function criarMarcadorOnibus(numero, proximaPartida) {
+  const el = document.createElement("div");
+  el.className = "placa-onibus";
+  el.title = `Linha ${numero} — próxima partida ${proximaPartida}`;
+  el.textContent = `🚌 ${numero}`;
+  return el;
 }
 
-// Ícone de "Você": círculo verde com halo pulsante
-function iconeVoce() {
-  return L.divIcon({
-    className: "icone-voce",
-    html: `<div class="ponto-voce"><span></span></div>`,
-    iconSize: [20, 20],
-    iconAnchor: [10, 10],
-  });
+// Ícone de "Você": círculo verde com halo pulsante (HTML/CSS)
+function criarMarcadorVoce() {
+  const el = document.createElement("div");
+  el.className = "ponto-voce";
+  el.innerHTML = "<span></span>";
+  return el;
 }
 
 /* ============================================================
@@ -188,14 +246,18 @@ function criarOuAtualizarOnibusNoMapa(linha) {
 
   // Ainda não tem marcador para essa linha? Cria.
   if (!marcadoresOnibus[linha.numero]) {
-    marcadoresOnibus[linha.numero] = L.marker(posInicial, {
-      icon: iconeOnibus(linha.numero, linha.partidas[0]),
-    }).addTo(mapa);
+    const el = criarMarcadorOnibus(linha.numero, linha.partidas[0]);
+    const marcador = new maplibregl.Marker(el)
+      .setLngLat(posInicial)
+      .addTo(mapa);
+    marcadoresOnibus[linha.numero] = marcador;
 
     // Clique no ônibus: popup com as informações da linha
-    marcadoresOnibus[linha.numero].bindPopup(
-      `<strong>🚌 Linha ${linha.numero}</strong><br>${linha.nome}<br>` +
-        `Partidas: ${linha.partidas.join(" · ")}`,
+    marcador.setPopup(
+      new maplibregl.Popup({ offset: 20 }).setHTML(
+        `<strong>🚌 Linha ${linha.numero}</strong><br>${linha.nome}<br>` +
+          `Partidas: ${linha.partidas.join(" · ")}`,
+      ),
     );
 
     // Calcula a ROTA NA RUA REAL entre VOCÊ e a parada do ônibus
@@ -209,18 +271,36 @@ function criarOuAtualizarOnibusNoMapa(linha) {
       linha._pontoRota = 0; // começa no início da rota
 
       // Desenha a linha da rota no mapa (tracejada roxa)
-      L.polyline(rota, {
-        color: "#9b5cff",
-        weight: 3,
-        dashArray: "6 8",
-        opacity: 0.6,
-      }).addTo(mapa);
+      mapa.addSource(`rota-${linha.numero}`, {
+        type: "geojson",
+        data: {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "LineString",
+            coordinates: rota.map(([lat, lon]) => [lon, lat]),
+          },
+        },
+      });
+      mapa.addLayer({
+        id: `rota-${linha.numero}`,
+        type: "line",
+        source: `rota-${linha.numero}`,
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: {
+          "line-color": "#9b5cff",
+          "line-width": 3,
+          "line-opacity": 0.7,
+        },
+      });
     });
   } else {
     // Já existe: só atualiza o popup (partidas podem ter mudado)
-    marcadoresOnibus[linha.numero].bindPopup(
-      `<strong>🚌 Linha ${linha.numero}</strong><br>${linha.nome}<br>` +
-        `Partidas: ${linha.partidas.join(" · ")}`,
+    marcadoresOnibus[linha.numero].setPopup(
+      new maplibregl.Popup({ offset: 20 }).setHTML(
+        `<strong>🚌 Linha ${linha.numero}</strong><br>${linha.nome}<br>` +
+          `Partidas: ${linha.partidas.join(" · ")}`,
+      ),
     );
   }
 }
@@ -242,12 +322,20 @@ function deslizarOnibus() {
 
     const idx = linha ? linha._pontoRota : 0;
     const novoPonto = rota[idx];
-    marcador.setLatLng(novoPonto); // move o ônibus pela rua real
+    marcador.setLngLat([novoPonto[1], novoPonto[0]]); // move o ônibus pela rua real
   });
 }
 
 /* ============================================================
    BARRA 1: BUSCA POR CEP EXATO
+   ------------------------------------------------------------
+   1) ViaCEP valida o CEP e devolve o endereço (rua, bairro, cidade, UF);
+   2) Nominatim (OpenStreetMap) GEOCODIFICA esse endereço -> lat/lon EXATAS.
+      Assim qualquer CEP do Brasil é posicionado corretamente no mapa
+      (não apenas os da tabela CEP_CONHECIDOS);
+   3) Fallback: tabela estática -> centro da cidade.
+   O estado (UF) selecionado na página é usado para desambiguar
+   (ex: mesma cidade existe em estados diferentes).
    ============================================================ */
 async function buscarCepExato() {
   const campoCep = document.getElementById("buscaCep");
@@ -285,32 +373,110 @@ async function buscarCepExato() {
 
     nomeRegiaoAtual = `${dados.bairro || dados.localidade}, ${dados.localidade}`;
 
-    // Coordenadas EXATAS da tabela (se existir)...
+    // O ESTADO escolhido na página manda na desambiguação:
+    // se o usuário trocar a UF, avisamos caso o CEP seja de outro estado.
+    const ufSelecionada = document.getElementById("buscaEstado")?.value;
+    if (ufSelecionada && ufSelecionada !== dados.uf) {
+      infoCep.textContent =
+        `⚠️ Este CEP é de ${dados.localidade}/${dados.uf}, mas você selecionou ` +
+        `${ufSelecionada}. Vamos mostrar o endereço real do CEP (${dados.uf}).`;
+    }
+
+    // 1ª tentativa: TABELA DE CEPs CONHECIDOS (instantânea)
     const conhecido = CEP_CONHECIDOS[cep];
     if (conhecido) {
       localizacaoAtual = { lat: conhecido.lat, lon: conhecido.lon };
-      infoCep.textContent = `✅ CEP exato: ${endereco} — 🎯 posição exata (${conhecido.rotulo})`;
-    } else {
-      // ... senão, centro da cidade (avisamos que é aproximado)
-      const centrosCidade = {
-        "São Paulo": { lat: -23.5505, lon: -46.6333 },
-        Guarulhos: { lat: -23.4543, lon: -46.5337 },
-        Osasco: { lat: -23.5324, lon: -46.7916 },
-        "Santo André": { lat: -23.6639, lon: -46.5383 },
-        "São Bernardo do Campo": { lat: -23.6944, lon: -46.5654 },
-        Diadema: { lat: -23.6861, lon: -46.625 },
-      };
-      const centro =
-        centrosCidade[dados.localidade] || centrosCidade["São Paulo"];
-      localizacaoAtual = { lat: centro.lat, lon: centro.lon };
-      infoCep.textContent = `✅ CEP: ${endereco} — ⚠️ posição aproximada (centro de ${dados.localidade}); use o GPS para precisão.`;
+      infoCep.textContent =
+        `✅ CEP exato: ${endereco} — 🎯 posição exata (${conhecido.rotulo})`;
+      return localizacaoAtual;
     }
 
-    return localizacaoAtual;
+    // 2ª tentativa: GEOCODIFICAÇÃO REAL (Nominatim / OpenStreetMap).
+    // Busca pelo CEP; se falhar, busca pelo endereço completo do ViaCEP.
+    infoCep.textContent = "🛰️ Localizando endereço no mapa...";
+    const coord = await geocodificarCep(dados, ufSelecionada);
+    if (coord) {
+      localizacaoAtual = coord;
+      infoCep.textContent =
+        `✅ CEP: ${endereco} — 🎯 localizado no mapa (rua real, coordenadas precisas)`;
+      return localizacaoAtual;
+    }
+
+    // 3ª tentativa: FALLBACK — centro da cidade do CEP (via Nominatim)
+    infoCep.textContent = "🛰️ Localizando cidade...";
+    const centroCidade = await geocodificar(
+      `${dados.localidade}, ${dados.uf}, Brasil`,
+    );
+    if (centroCidade) {
+      localizacaoAtual = centroCidade;
+      infoCep.textContent =
+        `✅ CEP: ${endereco} — ⚠️ posição aproximada (centro de ${dados.localidade}/${dados.uf}); ` +
+        `o número exato não foi encontrado no mapa aberto.`;
+      return localizacaoAtual;
+    }
+
+    infoCep.textContent =
+      "❌ Não foi possível localizar este CEP no mapa. Tente novamente em instantes.";
+    return null;
   } catch (erro) {
     infoCep.textContent = "❌ Erro de rede ao consultar o CEP.";
     return null;
   }
+}
+
+/* ============================================================
+   GEOCODIFICAÇÃO (Nominatim — OpenStreetMap, gratuito)
+   ------------------------------------------------------------
+   Converte um TEXTO de endereço em coordenadas reais.
+   Exige um header User-Agent identificando a aplicação.
+   ============================================================ */
+async function geocodificar(texto) {
+  try {
+    const url =
+      `https://nominatim.openstreetmap.org/search?format=json&limit=1` +
+      `&countrycodes=br&addressdetails=1&q=${encodeURIComponent(texto)}`;
+
+    const resposta = await fetch(url, {
+      headers: { "User-Agent": "ProjetoDiaADia/1.0 (uso pessoal)" },
+    });
+    const lista = await resposta.json();
+
+    if (Array.isArray(lista) && lista.length > 0) {
+      return {
+        lat: parseFloat(lista[0].lat),
+        lon: parseFloat(lista[0].lon),
+      };
+    }
+  } catch (e) {
+    // sem internet ou Nominatim fora -> fallback do chamador
+  }
+  return null;
+}
+
+/* ============================================================
+   GEOCODIFICA UM CEP (com o ESTADO para desambiguar)
+   ------------------------------------------------------------
+   1ª passada: "<CEP>, <UF>, Brasil" — Nominatim entende CEP direto;
+   2ª passada: endereço completo do ViaCEP (rua, número, bairro, cidade, UF).
+   ============================================================ */
+async function geocodificarCep(viaCep, ufSelecionada) {
+  const uf = ufSelecionada || viaCep.uf;
+
+  // Passada 1: o próprio CEP como texto
+  const porCep = await geocodificar(`${viaCep.cep}, ${uf}, Brasil`);
+  if (porCep) return porCep;
+
+  // Passada 2: endereço completo (rua + bairro + cidade + UF)
+  const enderecoCompleto = [
+    viaCep.logradouro,
+    viaCep.bairro,
+    viaCep.localidade,
+    uf,
+    "Brasil",
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return await geocodificar(enderecoCompleto);
 }
 
 /* ============================================================
@@ -499,23 +665,34 @@ function atualizarMapa(ordenadas) {
   inicializarMapa();
 
   // Limpa marcadores/rotas da região ANTERIOR (novo CEP = nova frota)
-  Object.values(marcadoresOnibus).forEach((m) => mapa.removeLayer(m));
-  Object.values(rotasOnibus).forEach((poly) => mapa.hasLayer(poly) && mapa.removeLayer(poly));
+  Object.values(marcadoresOnibus).forEach((m) => m.remove());
+  Object.keys(rotasOnibus).forEach((numero) => {
+    if (mapa.getLayer(`rota-${numero}`)) mapa.removeLayer(`rota-${numero}`);
+    if (mapa.getSource(`rota-${numero}`)) mapa.removeSource(`rota-${numero}`);
+  });
   marcadoresOnibus = {};
   rotasOnibus = {};
 
-  // Centraliza o mapa NO LOCAL EXATO buscado (CEP ou GPS)
-  mapa.setView([localizacaoAtual.lat, localizacaoAtual.lon], 13);
+  // Centraliza a câmera NO LOCAL EXATO buscado (CEP ou GPS)
+  mapa.flyTo({
+    center: [localizacaoAtual.lon, localizacaoAtual.lat],
+    zoom: 14,
+    pitch: 55,
+    duration: 1200,
+  });
 
   // Marcador verde "Você" (cria ou move)
   if (!marcadorVoce) {
-    marcadorVoce = L.marker([localizacaoAtual.lat, localizacaoAtual.lon], {
-      icon: iconeVoce(),
-    })
-      .addTo(mapa)
-      .bindPopup("<strong>🟢 Você está aqui</strong>");
+    marcadorVoce = new maplibregl.Marker({ element: criarMarcadorVoce() })
+      .setLngLat([localizacaoAtual.lon, localizacaoAtual.lat])
+      .setPopup(
+        new maplibregl.Popup({ offset: 20 }).setHTML(
+          "<strong>🟢 Você está aqui</strong>",
+        ),
+      )
+      .addTo(mapa);
   } else {
-    marcadorVoce.setLatLng([localizacaoAtual.lat, localizacaoAtual.lon]);
+    marcadorVoce.setLngLat([localizacaoAtual.lon, localizacaoAtual.lat]);
   }
 
   // Cria (ou atualiza) cada ônibus do resultado
@@ -591,6 +768,100 @@ function usarMinhaLocalizacao() {
 }
 
 /* ============================================================
+   FAVORITOS DE CEP (localStorage — ficam no aparelho)
+   ------------------------------------------------------------
+   Estrutura: [{ cep, rotulo, criadoEm }]
+   ============================================================ */
+function lerFavoritos() {
+  try {
+    return JSON.parse(localStorage.getItem("cepsFavoritos")) || [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function escreverFavoritos(lista) {
+  localStorage.setItem("cepsFavoritos", JSON.stringify(lista));
+  renderizarFavoritos();
+}
+
+// Salva o CEP atualmente digitado no campo (com o rótulo do ViaCEP
+// se já buscamos; senão o CEP puro)
+async function salvarFavoritoDoCampo() {
+  const campo = document.getElementById("buscaCep");
+  const info = document.getElementById("cepInfo");
+  if (!campo) return;
+
+  const cep = campo.value.replace(/\D/g, "");
+  if (cep.length !== 8) {
+    if (info) info.textContent = "❌ Digite um CEP válido (8 números) antes de salvar.";
+    return;
+  }
+
+  const favoritos = lerFavoritos();
+  if (favoritos.some((f) => f.cep === cep)) {
+    if (info) info.textContent = "ℹ️ Este CEP já está nos favoritos.";
+    return;
+  }
+
+  // Busca o endereço no ViaCEP para dar um RÓTULO amigável
+  let rotulo = cep;
+  try {
+    const resposta = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+    const dados = await resposta.json();
+    if (!dados.erro) {
+      rotulo = [dados.logradouro, dados.bairro, `${dados.localidade}/${dados.uf}`]
+        .filter(Boolean)
+        .join(", ");
+    }
+  } catch (e) {
+    // sem internet: salva com o CEP puro mesmo
+  }
+
+  favoritos.push({ cep, rotulo, criadoEm: Date.now() });
+  escreverFavoritos(favoritos);
+  if (info) info.textContent = `⭐ Favorito salvo: ${rotulo}`;
+}
+
+// Remove um favorito pelo CEP
+function removerFavorito(cep) {
+  escreverFavoritos(lerFavoritos().filter((f) => f.cep !== cep));
+}
+
+// Busca direto um favorito (1 clique: preenche o campo e dispara a busca)
+function usarFavorito(cep) {
+  const campo = document.getElementById("buscaCep");
+  if (campo) campo.value = cep;
+  buscarOnibus();
+}
+
+// Desenha a lista de favoritos na página
+function renderizarFavoritos() {
+  const caixa = document.getElementById("listaFavoritos");
+  if (!caixa) return;
+
+  const favoritos = lerFavoritos();
+  if (favoritos.length === 0) {
+    caixa.innerHTML = `<p style="opacity:0.6; font-size:13px">Nenhum favorito ainda — busque um CEP e clique em “Salvar como favorito”.</p>`;
+    return;
+  }
+
+  caixa.innerHTML = favoritos
+    .map(
+      (f) => `
+      <div class="favorito-item">
+        <button type="button" class="favorito-usar" onclick="usarFavorito('${f.cep}')"
+          title="Buscar ônibus neste CEP">
+          ⭐ <strong>${f.cep}</strong> — ${f.rotulo}
+        </button>
+        <button type="button" class="favorito-remover" onclick="removerFavorito('${f.cep}')"
+          title="Remover dos favoritos">🗑️</button>
+      </div>`,
+    )
+    .join("");
+}
+
+/* ============================================================
    BOTÃO "TEMPO REAL": liga/desliga os dois relógios
    - lento (15s): refaz a busca (ordenamento/lista)
    - rápido (2s): desliza os ônibus pela rota nas ruas reais
@@ -631,6 +902,9 @@ function iniciarTempoReal() {
 document.addEventListener("DOMContentLoaded", async () => {
   await carregarLinhas();
   inicializarMapa(); // mapa já aparece com as ruas de SP
+
+  // FAVORITOS: desenha a lista salva no aparelho
+  renderizarFavoritos();
 
   // Hora padrão = agora
   const campoHora = document.getElementById("buscaHora");
