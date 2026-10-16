@@ -21,6 +21,18 @@
 
 /* ---------- ESTADO GLOBAL DA PÁGINA ---------- */
 const INTERVALO_TEMPORAL_MS = 15000; // atualização lenta (lista/ordenação)
+
+/* Sanitização anti-XSS: todo texto dinâmico que entra em innerHTML
+   passa por aqui (converte < > & " ' em entidades HTML). */
+function esc(texto) {
+  return String(texto ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[c]);
+}
 const TICK_DESLIZA_MS = 2000; // desliza os ônibus a cada 2s
 let intervaloReal = null; // timer do tempo real (ligar/desligar)
 let localizacaoAtual = null; // { lat, lon } do usuário
@@ -94,8 +106,13 @@ async function carregarLinhas() {
 
   try {
     const resposta = await fetch("../dados/onibus.json");
+    if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
     const json = await resposta.json();
-    todasLinhas = json.linhas || [];
+    // Validação da estrutura: só aceita se vier como { linhas: [...] }
+    if (!json || !Array.isArray(json.linhas)) {
+      throw new Error("Estrutura inesperada do onibus.json");
+    }
+    todasLinhas = json.linhas;
   } catch (erro) {
     const resultados = document.getElementById("resultadosOnibus");
     if (resultados) {
@@ -915,7 +932,7 @@ function renderizarFavoritos() {
       <div class="favorito-item">
         <button type="button" class="favorito-usar" onclick="usarFavorito('${f.cep}')"
           title="Buscar ônibus neste CEP">
-          ⭐ <strong>${f.cep}</strong> — ${f.rotulo}
+          ⭐ <strong>${f.cep}</strong> — ${esc(f.rotulo)}
         </button>
         <button type="button" class="favorito-remover" onclick="removerFavorito('${f.cep}')"
           title="Remover dos favoritos">🗑️</button>
