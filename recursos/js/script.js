@@ -16,6 +16,36 @@
    ============================================================ */
 
 /* ============================================================
+   0. SANITIZAÇÃO DE TEXTO (anti-XSS)
+   ------------------------------------------------------------
+   Todo texto digitado pelo usuário que vai para innerHTML passa
+   por aqui: converte < > & " em entidades HTML. Sem isso, um
+   usuário pode salvar "<img src=x onerror=alert(1)>" como tarefa
+   e o script roda na próxima abertura da página (XSS persistente).
+   ============================================================ */
+function esc(texto) {
+  return String(texto ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[c]);
+}
+
+/* Parse seguro de JSON: devolve fallback em vez de quebrar a página
+   se o localStorage estiver corrompido/parcial */
+function lerJSONSeguro(chave, fallback) {
+  try {
+    const raw = localStorage.getItem(chave);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch (e) {
+    console.warn(`Dado corrompido em "${chave}"; usando valor padrão.`, e);
+    return fallback;
+  }
+}
+
+/* ============================================================
    1. RELÓGIO AO VIVO
    Atualiza o elemento #relogio a cada 1 segundo.
    ============================================================ */
@@ -94,7 +124,7 @@ function gerarCalendarioAnotacoes() {
   // Cria um cartão para cada dia do mês
   for (let dia = 1; dia <= diasNoMes; dia++) {
     const saved = localStorage.getItem(keyDia(dia, ano, mes)); // anotação salva?
-    const tipo = saved ? JSON.parse(saved).tipo || "" : ""; // tipo do dia
+    const tipo = saved ? lerJSONSeguro(keyDia(dia, ano, mes), {}).tipo || "" : ""; // tipo do dia
     const classeTipo = tipo ? `dia-${tipo}` : ""; // classe CSS de cor
 
     const isSelected = diaSelecionado === dia; // dia clicado?
@@ -130,7 +160,7 @@ function ciclarTipoDiaAtual() {
   const tipos = ["urgente", "prioridade", "normal"]; // ordem da rotação
 
   const atualObj = localStorage.getItem(dataKey);
-  const atualTipo = atualObj ? JSON.parse(atualObj).tipo || "" : "";
+  const atualTipo = atualObj ? lerJSONSeguro(dataKey, {}).tipo || "" : "";
 
   // indexOf devolve -1 se não achou; +1 e % move para o próximo da lista
   const proxIndex = tipos.indexOf(atualTipo) + 1;
@@ -160,7 +190,11 @@ function renderTarefasDoDia(dia) {
   label.textContent = `Dia ${dia} / ${mes + 1} / ${ano}`;
 
   const key = keyTarefasDia(dia, ano, mes);
-  const tarefas = JSON.parse(localStorage.getItem(key) || "[]");
+  const tarefas = lerJSONSeguro(key, []);
+  if (!Array.isArray(tarefas)) {
+    lista.innerHTML = `<li style="opacity:0.75">Nenhuma tarefa para este dia.</li>`;
+    return;
+  }
 
   if (tarefas.length === 0) {
     lista.innerHTML = `<li style="opacity:0.75">Nenhuma tarefa para este dia.</li>`;
@@ -173,7 +207,7 @@ function renderTarefasDoDia(dia) {
       (t) => `
         <li class="tarefa-item ${t.completa ? "completa" : ""}">
             <input type="checkbox" ${t.completa ? "checked" : ""} onchange="toggleTarefaDia(${t.id})" data-tarefa-id="${t.id}">
-            <span>${t.texto}</span>
+            <span>${esc(t.texto)}</span>
             <button onclick="deletarTarefaDia(${t.id})" type="button">🗑️</button>
         </li>
     `,
@@ -187,7 +221,7 @@ function toggleTarefaDia(id) {
   const { ano, mes } = mesAtualState;
   const key = keyTarefasDia(diaSelecionado, ano, mes);
 
-  let tarefas = JSON.parse(localStorage.getItem(key) || "[]");
+  let tarefas = lerJSONSeguro(key, []);
   const idx = tarefas.findIndex((t) => t.id === id);
   if (idx < 0) return; // tarefa não existe (safety)
   tarefas[idx].completa = !tarefas[idx].completa; // inverte o estado
@@ -201,7 +235,7 @@ function deletarTarefaDia(id) {
   const { ano, mes } = mesAtualState;
   const key = keyTarefasDia(diaSelecionado, ano, mes);
 
-  let tarefas = JSON.parse(localStorage.getItem(key) || "[]");
+  let tarefas = lerJSONSeguro(key, []);
   tarefas = tarefas.filter((t) => t.id !== id);
   localStorage.setItem(key, JSON.stringify(tarefas));
   renderTarefasDoDia(diaSelecionado);
@@ -241,8 +275,7 @@ function fazerLogin() {
   const pass = senha.value;
 
   // Lê a "base de usuários" do localStorage (demo)
-  const raw = localStorage.getItem("users_planner_v1");
-  const users = raw ? JSON.parse(raw) : [];
+  const users = lerJSONSeguro("users_planner_v1", []);
 
   const encontrado = users.find((u) => u.usuario === user);
 
@@ -296,8 +329,7 @@ function cadastrarUsuario() {
     return;
   }
 
-  const raw = localStorage.getItem("users_planner_v1");
-  const users = raw ? JSON.parse(raw) : [];
+  const users = lerJSONSeguro("users_planner_v1", []);
 
   // Não pode existir usuário repetido
   const existe = users.some((x) => x.usuario === usuario);
@@ -362,14 +394,13 @@ function confirmarRedefinicao() {
   const codigoDigitado = (resetCodigo.value || "").trim();
   const novoSenha = (resetNovaSenha.value || "").trim();
 
-  const raw = localStorage.getItem("sms_demo_codigo");
-  if (!raw) {
+  const data = lerJSONSeguro("sms_demo_codigo", null);
+  if (!data) {
     resetMsg.style.color = "#ff6b7a";
     resetMsg.textContent = "Nenhum código foi enviado. Tente novamente.";
     return;
   }
 
-  const data = JSON.parse(raw);
   if (data.codigo !== codigoDigitado) {
     resetMsg.style.color = "#ff6b7a";
     resetMsg.textContent = "Código inválido. Verifique e tente novamente.";
@@ -442,7 +473,7 @@ function carregarFinanceiro() {
   const dataRaw = localStorage.getItem("financas");
   if (!dataRaw) return; // nunca salvou nada ainda
 
-  const data = JSON.parse(dataRaw);
+  const data = lerJSONSeguro("financas", {});
 
   const entradaEl = document.getElementById("entrada");
   const saidaEl = document.getElementById("saida");
@@ -492,7 +523,7 @@ function adicionarTarefa() {
 
   const key = keyTarefasDia(d, y, m - 1); // mesIndex é 0-based
 
-  const tarefas = JSON.parse(localStorage.getItem(key) || "[]");
+  const tarefas = lerJSONSeguro(key, []);
   // Date.now() como id: quase único e crescente
   tarefas.push({
     texto,
@@ -518,14 +549,14 @@ function carregarTarefasLista() {
 
   const [y, m, d] = dateStr.split("-").map(Number);
   const key = keyTarefasDia(d, y, m - 1);
-  const tarefas = JSON.parse(localStorage.getItem(key) || "[]");
+  const tarefas = lerJSONSeguro(key, []);
 
   lista.innerHTML = tarefas
     .map(
       (t) => `
         <li class="tarefa-item ${t.completa ? "completa" : ""}">
             <input type="checkbox" ${t.completa ? "checked" : ""} onchange="toggleTarefaLista(${t.id})">
-            <span>${t.texto}</span>
+            <span>${esc(t.texto)}</span>
             <button onclick="deletarTarefaLista(${t.id})" type="button">🗑️</button>
         </li>
     `,
@@ -540,7 +571,7 @@ function toggleTarefaLista(id) {
   const [y, m, d] = dataSel.value.split("-").map(Number);
   const key = keyTarefasDia(d, y, m - 1);
 
-  let tarefas = JSON.parse(localStorage.getItem(key) || "[]");
+  let tarefas = lerJSONSeguro(key, []);
   const idx = tarefas.findIndex((t) => t.id === id);
   if (idx < 0) return;
   tarefas[idx].completa = !tarefas[idx].completa;
@@ -555,7 +586,7 @@ function deletarTarefaLista(id) {
   const [y, m, d] = dataSel.value.split("-").map(Number);
   const key = keyTarefasDia(d, y, m - 1);
 
-  let tarefas = JSON.parse(localStorage.getItem(key) || "[]");
+  let tarefas = lerJSONSeguro(key, []);
   tarefas = tarefas.filter((t) => t.id !== id);
   localStorage.setItem(key, JSON.stringify(tarefas));
   carregarTarefasLista();
