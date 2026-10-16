@@ -10,7 +10,7 @@
      offline e não devem ser "congelados".
    ============================================================ */
 
-const CACHE = "diaadia-v1";
+const CACHE = "diaadia-v2"; // v2: fix race condition mapa + cache geocoding + aviso demo
 
 const ARQUIVOS_APP = [
   "./",
