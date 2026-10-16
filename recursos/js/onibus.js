@@ -30,6 +30,13 @@ let ultimaBusca = null; // últimas linhas ordenadas (para o mapa)
 
 /* ---------- MAPA 3D (MapLibre GL) ---------- */
 let mapa = null; // objeto do mapa MapLibre
+let mapaPronto = false; // estilo do mapa já carregou? (evita addLayer antes do 'load')
+
+/* Executa cb quando o estilo do mapa está pronto (na hora, se já carregou) */
+function quandoMapaPronto(cb) {
+  if (mapaPronto) cb();
+  else mapa.once("load", cb);
+}
 let modo3D = true; // prédios em 3D ligados?
 let marcadorVoce = null; // marcador verde "Você"
 let marcadoresOnibus = {}; // { numero: marcador } de cada ônibus
@@ -131,6 +138,7 @@ function inicializarMapa() {
   // O estilo da OpenFreeMap já traz a fonte vetorial "openmaptiles" (OSM);
   // adicionamos por cima um fill-extrusion com os PRÉDIOS em volume.
   mapa.on("load", () => {
+    mapaPronto = true; // libera criação de camadas (rotas dos ônibus)
     try {
       if (!mapa.getSource("openmaptiles")) return; // estilo sem fonte vetorial
 
@@ -270,29 +278,33 @@ function criarOuAtualizarOnibusNoMapa(linha) {
       rotasOnibus[linha.numero] = rota;
       linha._pontoRota = 0; // começa no início da rota
 
-      // Desenha a linha da rota no mapa (tracejada roxa)
-      mapa.addSource(`rota-${linha.numero}`, {
-        type: "geojson",
-        data: {
-          type: "Feature",
-          properties: {},
-          geometry: {
-            type: "LineString",
-            coordinates: rota.map(([lat, lon]) => [lon, lat]),
+      // Só mexemos em camadas quando o ESTILO do mapa está pronto
+      // (evita erro "Style is not done loading" em buscas muito rápidas)
+      quandoMapaPronto(() => {
+        // Desenha a linha da rota no mapa (tracejada roxa)
+        mapa.addSource(`rota-${linha.numero}`, {
+          type: "geojson",
+          data: {
+            type: "Feature",
+            properties: {},
+            geometry: {
+              type: "LineString",
+              coordinates: rota.map(([lat, lon]) => [lon, lat]),
+            },
           },
-        },
-      });
-      mapa.addLayer({
-        id: `rota-${linha.numero}`,
-        type: "line",
-        source: `rota-${linha.numero}`,
-        layout: { "line-join": "round", "line-cap": "round" },
-        paint: {
-          "line-color": "#9b5cff",
-          "line-width": 3,
-          "line-opacity": 0.7,
-        },
-      });
+        });
+        mapa.addLayer({
+          id: `rota-${linha.numero}`,
+          type: "line",
+          source: `rota-${linha.numero}`,
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": "#9b5cff",
+            "line-width": 3,
+            "line-opacity": 0.7,
+          },
+        });
+      }); // fim quandoMapaPronto
     });
   } else {
     // Já existe: só atualiza o popup (partidas podem ter mudado)
