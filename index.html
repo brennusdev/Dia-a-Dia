@@ -1,0 +1,20 @@
+<!doctype html>
+<!-- Redirecionador da raiz: mantém /paginas/index.html como a home real.
+     Garante que acessar "/" em QUALQUER hospedagem estática não dê 404. -->
+<html lang="pt-br">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Dia a Dia</title>
+    <meta http-equiv="refresh" content="0; url=paginas/index.html" />
+    <link rel="manifest" href="./manifest.json" />
+    <script>
+      window.location.replace("paginas/index.html");
+    </script>
+  </head>
+  <body>
+    <p>
+      Abrindo o Dia a Dia... <a href="paginas/index.html">clique aqui</a> se não
+      redirecionar.
+    </p>
+  </body>
+</html>
