@@ -7,6 +7,9 @@
 
     <!-- conexão com css corrigida -->
     <link rel="stylesheet" href="../recursos/css/style.css">
+    <!-- PWA: manifesto + registro do service worker a partir da home -->
+    <link rel="manifest" href="../manifest.json">
+    <meta name="theme-color" content="#7a3cff">
 </head>
 <body>
 
@@ -16,6 +19,13 @@
         <!-- título -->
         <h1>Meu Planner de Produtividade</h1>
         <p>Organize sua vida, metas e rotina.</p>
+
+        <!-- AVISO: login/cadastro deste app são DEMO (sem servidor).
+             Dados ficam apenas no seu aparelho (localStorage). -->
+        <p class="aviso-demo" style="margin-top:10px">
+          ℹ️ Este é um app pessoal: login, cadastro e dados ficam salvos
+          <strong>apenas neste aparelho</strong> (não há servidor de contas).
+        </p>
 
         <!-- área dos botões de navegação -->
         <div class="menu-botoes">
@@ -34,5 +44,15 @@
 
     </div>
 
+    <!-- PWA: registra o service worker (offline + instalável) -->
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker
+            .register("../sw.js")
+            .catch((e) => console.log("PWA indisponível (ok em dev):", e.message));
+        });
+      }
+    </script>
 </body>
 </html>
