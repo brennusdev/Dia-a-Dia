@@ -365,6 +365,16 @@ async function buscarCepExato() {
 
   infoCep.textContent = "🔎 Verificando CEP...";
 
+  // CACHE (10 min): mesmo CEP re-buscado no "tempo real" não repete
+  // consultas ao ViaCEP/Nominatim (evita rate limit/ban do Nominatim)
+  const doCache = lerCacheGeocoding(cep);
+  if (doCache) {
+    localizacaoAtual = doCache.localizacao;
+    nomeRegiaoAtual = doCache.regiao;
+    infoCep.textContent = doCache.mensagem + " (em cache, 10 min)";
+    return localizacaoAtual;
+  }
+
   try {
     // ViaCEP: se o CEP não existir, responde { erro: true }
     const resposta = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
@@ -398,8 +408,14 @@ async function buscarCepExato() {
     const conhecido = CEP_CONHECIDOS[cep];
     if (conhecido) {
       localizacaoAtual = { lat: conhecido.lat, lon: conhecido.lon };
-      infoCep.textContent =
+      const mensagem =
         `✅ CEP exato: ${endereco} — 🎯 posição exata (${conhecido.rotulo})`;
+      gravarCacheGeocoding(cep, {
+        localizacao: { ...localizacaoAtual },
+        regiao: nomeRegiaoAtual,
+        mensagem,
+      });
+      infoCep.textContent = mensagem;
       return localizacaoAtual;
     }
 
@@ -409,8 +425,14 @@ async function buscarCepExato() {
     const coord = await geocodificarCep(dados, ufSelecionada);
     if (coord) {
       localizacaoAtual = coord;
-      infoCep.textContent =
+      const mensagem =
         `✅ CEP: ${endereco} — 🎯 localizado no mapa (rua real, coordenadas precisas)`;
+      gravarCacheGeocoding(cep, {
+        localizacao: { ...localizacaoAtual },
+        regiao: nomeRegiaoAtual,
+        mensagem,
+      });
+      infoCep.textContent = mensagem;
       return localizacaoAtual;
     }
 
@@ -421,9 +443,15 @@ async function buscarCepExato() {
     );
     if (centroCidade) {
       localizacaoAtual = centroCidade;
-      infoCep.textContent =
+      const mensagem =
         `✅ CEP: ${endereco} — ⚠️ posição aproximada (centro de ${dados.localidade}/${dados.uf}); ` +
         `o número exato não foi encontrado no mapa aberto.`;
+      gravarCacheGeocoding(cep, {
+        localizacao: { ...localizacaoAtual },
+        regiao: nomeRegiaoAtual,
+        mensagem,
+      });
+      infoCep.textContent = mensagem;
       return localizacaoAtual;
     }
 
@@ -542,6 +570,29 @@ function distanciaKm(lat1, lon1, lat2, lon2) {
    daquela latitude/longitude — a estrutura já está pronta.
    ============================================================ */
 let frotaRegiaoAtual = null; // linhas posicionadas na região buscada
+
+/* ============================================================
+   CACHE DE LOCALIZAÇÃO POR CEP (memória, ~10 min)
+   ------------------------------------------------------------
+   O Nominatim (OpenStreetMap) tem política de rate limit e pode
+   BLOQUEAR IPs que repetem consultas rápido. Como o modo "tempo
+   real" refaz a busca a cada 15s, guardamos o resultado do
+   geocoding por 10 minutos — o mesmo CEP não é geocodificado
+   de novo dentro desse prazo.
+   ============================================================ */
+const CACHE_GEO_MS = 10 * 60 * 1000; // 10 minutos
+const cacheGeocoding = {}; // { cep: { valor, expiraEm } }
+
+function lerCacheGeocoding(cep) {
+  const item = cacheGeocoding[cep];
+  if (item && item.expiraEm > Date.now()) return item.valor;
+  delete cacheGeocoding[cep]; // expirou
+  return null;
+}
+
+function gravarCacheGeocoding(cep, valor) {
+  cacheGeocoding[cep] = { valor, expiraEm: Date.now() + CACHE_GEO_MS };
+}
 
 // Gera (ou reaproveita) a frota da região em torno de {lat, lon}
 function gerarFrotaDaRegiao(local) {
