@@ -10,10 +10,11 @@
      offline e não devem ser "congelados".
    ============================================================ */
 
-const CACHE = "diaadia-v2"; // v2: fix race condition mapa + cache geocoding + aviso demo
+const CACHE = "diaadia-v3"; // v3: SW robusto (same-origin, catch offline) + index raiz + anti-XSS
 
 const ARQUIVOS_APP = [
   "./",
+  "./index.html",
   "./manifest.json",
   "./paginas/index.html",
   "./paginas/onibus.html",
@@ -55,19 +56,11 @@ self.addEventListener("activate", (evento) => {
 self.addEventListener("fetch", (evento) => {
   const url = evento.request.url;
 
-  // APIs externas: sempre rede (não cachear dados dinâmicos)
-  const externas =
-    url.includes("viacep") ||
-    url.includes("nominatim") ||
-    url.includes("osrm") ||
-    url.includes("openfreemap") ||
-    url.includes("unpkg.com") ||
-    url.includes("olhovivo") ||
-    url.includes("sptrans");
+  // Só intercepta requisições do PRÓPRIO domínio (GET)
+  // APIs externas (ViaCEP, OSRM, tiles...) passam direto, sem cachear
+  if (evento.request.method !== "GET") return;
+  if (new URL(url).origin !== self.location.origin) return;
 
-  if (externas) return; // deixa passar sem interceptar
-
-  // Arquivos do app: cache-first (offline OK)
   evento.respondWith(
     caches.match(evento.request).then(
       (doCache) =>
@@ -78,6 +71,13 @@ self.addEventListener("fetch", (evento) => {
           caches.open(CACHE).then((cache) => cache.put(evento.request, copia));
           return resposta;
         }),
+    ).catch(() =>
+      // Offline e sem cópia em cache: responde sem quebrar (não deixa
+      // o respondWith estourar exceção não tratada no navegador)
+      new Response("Offline: arquivo não disponível no cache.", {
+        status: 504,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      }),
     ),
   );
 });
